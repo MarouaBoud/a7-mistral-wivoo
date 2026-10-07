@@ -200,10 +200,6 @@ export default function Conduite() {
         </div>
 
         <div className="stack">
-          <button className="trouver" onClick={pleinMaintenant} disabled={cherche}>
-            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Rechercher à nouveau depuis ici' : '⛽ Faire le plein maintenant'}
-          </button>
-
           <div className="jauge">
             <div className="top"><span>⛽ Carburant · comme au tableau de bord</span><span className="val">{Math.round(niveauL)} L</span></div>
             <div className="segs" role="group" aria-label="Niveau de carburant">
@@ -216,6 +212,10 @@ export default function Conduite() {
             </div>
             <div className="top" style={{ marginTop: 6 }}><span>Autonomie ≈ {Math.round(autonomie)} km</span><span>Plein : {Math.round(VEHICULE.reservoirL - niveauL)} L</span></div>
           </div>
+
+          <button className="trouver" onClick={pleinMaintenant} disabled={cherche}>
+            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Rechercher à nouveau depuis ici' : '⛽ Faire le plein maintenant'}
+          </button>
 
           <ol className="liv">
             {arrets.map((l, i) => (
