@@ -19,13 +19,13 @@ export function transformStationRecord(record: StationRecord): StationData {
 
   // Map fuel data
   const fuels = [
-    { field: 'gazole', key: 'gazole' as const },
-    { field: 'sp95', key: 'sp95' as const },
-    { field: 'sp98', key: 'sp98' as const },
-    { field: 'e10', key: 'e10' as const },
-    { field: 'e85', key: 'e85' as const },
-    { field: 'gplc', key: 'gplc' as const },
-  ];
+    { field: 'gazole', key: 'gazole' },
+    { field: 'sp95', key: 'sp95' },
+    { field: 'sp98', key: 'sp98' },
+    { field: 'e10', key: 'e10' },
+    { field: 'e85', key: 'e85' },
+    { field: 'gplc', key: 'gplc' },
+  ] as const;
 
   for (const { field, key } of fuels) {
     const prix = rest[`${field}_prix`];
