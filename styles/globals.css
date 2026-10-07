@@ -1,0 +1,62 @@
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+}
+
+/* Fix for Leaflet container height */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Style for station popups */
+.station-popup {
+  min-width: 250px;
+}
+
+.station-popup h3,
+.station-popup h4 {
+  color: #333;
+}
+
+.station-popup hr {
+  border: 0;
+  border-top: 1px solid #ccc;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .leaflet-container {
+    height: 300px !important;
+  }
+}
+
+/* Marker cluster styles */
+.marker-cluster {
+  background-color: #ff7800;
+  border-radius: 20px;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  line-height: 1.2;
+  padding: 4px 8px;
+}
+
+.marker-cluster-count {
+  display: block;
+  font-size: 12px;
+}
+
+/* Fix leaflet icons */
+.leaflet-default-icon-path {
+  background-image: url('/images/marker-icon.png');
+}
