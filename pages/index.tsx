@@ -27,6 +27,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);overscroll-b
 .recentrer{position:absolute;z-index:1000;right:12px;width:44px;height:44px;border-radius:50%;background:var(--surface);color:var(--ink);font-size:20px;box-shadow:0 2px 12px #0003}
 .sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;
 padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px #0003;display:flex;flex-direction:column;gap:12px;max-width:520px;margin:0 auto}
+.titre{font:400 20px/1.1 var(--display);text-align:center;letter-spacing:.01em}
 .grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
 .next{display:flex;align-items:center;gap:12px}
 .next .no{width:36px;height:36px;border-radius:12px;background:#e10500;color:#fff;display:grid;place-items:center;font:400 16px var(--display);flex:none}
@@ -189,15 +190,15 @@ export default function Conduite() {
           <div className="grab" />
           {!suivre && <button className="recentrer" style={{ top: -56 }} onClick={() => setSuivre(true)} aria-label="Recentrer">◎</button>}
 
-          {prochain && (
+          <div className="titre">Trouver la station</div>
+          {pleinPrevu && (
             <div className="next">
-              <div className={`no ${prochain.plein ? 'plein' : ''}`}>{prochain.plein ? '⛽' : LIVRAISONS.length - livraisons.length + 1}</div>
+              <div className="no plein">⛽</div>
               <div className="txt">
-                <div className="k">{prochain.plein ? 'Arrêt plein' : `Prochaine livraison · ${livraisons.length} restante${livraisons.length > 1 ? 's' : ''}`}</div>
-                <div className="nm">{prochain.client.replace('⛽ Plein · ', '')}</div>
-                <div className="ad">{prochain.adresse}</div>
+                <div className="nm">{pleinPrevu.client.replace('⛽ Plein · ', '')}</div>
+                <div className="ad">{pleinPrevu.adresse}</div>
               </div>
-              <button className="done" onClick={prochain.plein ? pleinFait : livrer}>{prochain.plein ? 'Plein fait' : 'Livré ✓'}</button>
+              <button className="done" onClick={pleinFait}>Plein fait</button>
             </div>
           )}
 
