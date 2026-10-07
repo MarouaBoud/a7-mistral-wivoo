@@ -44,28 +44,20 @@ export default function LiveMap({ position, trace, arrets, classement, suivre, p
       {position && arrets.length > 0 && (
         <Polyline positions={[position, ...arrets].map((p) => [p.lat, p.lon])} pathOptions={{ color: 'var(--route)', weight: 3, opacity: 0.35 }} />
       )}
-      {position && best && (() => {
+      {position && best && !arrets.some((a) => a.plein) && (() => {
         const pts = [position, ...arrets];
         const a = pts[best.troncon], b = pts[best.troncon + 1];
         return <Polyline positions={[[a.lat, a.lon], [best.station.latitude, best.station.longitude], [b.lat, b.lon]]}
           pathOptions={{ color: '#fa500f', dashArray: '7 5', weight: 3 }} />;
       })()}
       {arrets.map((l, i) => (
-        <CircleMarker key={l.id} center={[l.lat, l.lon]} radius={i === 0 ? 12 : 9}
-          pathOptions={{ color: 'white', weight: 2, fillColor: i === 0 ? '#e10500' : '#6b5f4f', fillOpacity: 1 }}>
-          <Tooltip permanent direction="center" className="num">{i + 1}</Tooltip>
+        <CircleMarker key={l.id} center={[l.lat, l.lon]} radius={l.plein ? 14 : i === 0 ? 12 : 9}
+          pathOptions={{ color: l.plein ? '#fa500f' : 'white', weight: l.plein ? 3 : 2,
+            fillColor: l.plein ? '#ffd800' : i === 0 ? '#e10500' : '#6b5f4f', fillOpacity: 1 }}>
+          <Tooltip permanent direction="center" className="num">{l.plein ? '⛽' : i + 1}</Tooltip>
           <Popup><b>{l.client}</b><br />{l.adresse}</Popup>
         </CircleMarker>
       ))}
-      {proche && (
-        <CircleMarker center={[proche.latitude, proche.longitude]} radius={13}
-          pathOptions={{ color: '#fa500f', weight: 4, fillColor: '#ffd800', fillOpacity: 1 }}>
-          <Tooltip permanent direction="top" offset={[0, -12]}>Station la plus proche</Tooltip>
-        </CircleMarker>
-      )}
-      {position && proche && (
-        <Polyline positions={[[position.lat, position.lon], [proche.latitude, proche.longitude]]} pathOptions={{ color: '#ffaf00', weight: 3, dashArray: '2 6' }} />
-      )}
       {position && <CircleMarker center={[position.lat, position.lon]} radius={9} pathOptions={{ color: 'white', weight: 3, fillColor: '#1e1e1e', fillOpacity: 1 }} />}
     </MapContainer>
   );

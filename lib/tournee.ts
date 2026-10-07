@@ -5,7 +5,7 @@ export const CONDUCTEUR = { prenom: 'Karim', nom: 'Benali' };
 export const VEHICULE = { modele: 'Renault Master 12 m³', immat: 'GH-482-KT', consoL100: 9.5, reservoirL: 80, carburant: 'gazole' as const };
 export const GRADUATIONS_JAUGE = 8; // segments affichés au tableau de bord
 
-export interface Livraison extends Point { id: string; client: string; adresse: string }
+export interface Livraison extends Point { id: string; client: string; adresse: string; plein?: boolean }
 
 export const LIVRAISONS: Livraison[] = [
   { id: 'L1', client: 'Boulangerie Martin', adresse: '12 rue de Rivoli, Paris 4e', lat: 48.8556, lon: 2.3600 },

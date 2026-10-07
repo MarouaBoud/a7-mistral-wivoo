@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import { transformStationRecord } from '../lib/stations';
 import { classerTournee, distanceKm, eur, Point, CoutStationTournee, HYPOTHESES_DEFAUT } from '../lib/cout';
-import { CONDUCTEUR, VEHICULE, LIVRAISONS, GRADUATIONS_JAUGE } from '../lib/tournee';
+import { CONDUCTEUR, VEHICULE, LIVRAISONS, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
 import { StationData } from '../types/station';
 
 const LiveMap = dynamic(() => import('../components/LiveMap'), { ssr: false });
@@ -71,7 +71,7 @@ const nom = (s: StationData) => s.nom || s.adresse;
 export default function Conduite() {
   const [position, setPosition] = useState<Point | null>(null);
   const [trace, setTrace] = useState<Point[]>([]);
-  const [arrets, setArrets] = useState(LIVRAISONS);
+  const [arrets, setArrets] = useState<Livraison[]>(LIVRAISONS);
   const [crans, setCrans] = useState(2); // crans allumés sur la jauge, saisis par le conducteur
   const horaire = 28; // €/h, fixé par le gestionnaire
   const [stations, setStations] = useState<StationData[]>([]);
@@ -111,20 +111,36 @@ export default function Conduite() {
   }, [position, arrets]);
 
   const niveauL = (VEHICULE.reservoirL * crans) / GRADUATIONS_JAUGE;
-  const classement: CoutStationTournee[] = position && arrets.length
-    ? classerTournee(stations, position, arrets, { ...VEHICULE, niveauL },
+  const livraisons = arrets.filter((a) => !a.plein);
+  const pleinPrevu = arrets.find((a) => a.plein);
+  const classement: CoutStationTournee[] = position && livraisons.length
+    ? classerTournee(stations, position, livraisons, { ...VEHICULE, niveauL },
       { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })
     : [];
   const best = classement[0];
   const cheap = classement.length ? classement.reduce((m, c) => (c.prix < m.prix ? c : m)) : null;
   const autonomie = (niveauL / VEHICULE.consoL100) * 100 * 0.85;
   const quand = (c: CoutStationTournee) => (c.troncon === 0 ? 'maintenant, avant la livraison 1' : `après la livraison ${c.troncon}`);
+  const numLiv = (l: Livraison) => livraisons.indexOf(l) + 1;
 
-  const [proche, setProche] = useState<{ station: StationData; km: number; prix: number } | null>(null);
   const [cherche, setCherche] = useState(false);
 
-  async function trouverStation() {
+  const checkpoint = (st: StationData, label: string): Livraison => ({
+    id: `plein-${st.id}`, plein: true, client: `⛽ Plein · ${nom(st)}`,
+    adresse: `${label} · ${st.carburants[VEHICULE.carburant]!.prix.toFixed(3)} €/L · ${st.ville}`,
+    lat: st.latitude, lon: st.longitude,
+  });
+
+  // Ajoute un arrêt plein dans la tournée : la station au meilleur coût réel, placée sur le bon tronçon
+  // selon la position et le carburant restant ; à défaut, la plus proche, tout de suite.
+  async function ajouterPlein() {
     if (!position) { setErreur('Position GPS inconnue.'); return; }
+    const sansPlein = arrets.filter((a) => !a.plein);
+    if (best) {
+      const cp = checkpoint(best.station, `${eur(best.coutReel)} réel · détour ${best.detourKm.toFixed(1)} km`);
+      setArrets([...sansPlein.slice(0, best.troncon), cp, ...sansPlein.slice(best.troncon)]);
+      return;
+    }
     setCherche(true);
     try {
       for (const rayon of [3, 10, 30]) {
@@ -135,8 +151,7 @@ export default function Conduite() {
         if (!dispo.length) continue;
         const km = (s: StationData) => distanceKm(position, { lat: s.latitude, lon: s.longitude }, HYPOTHESES_DEFAUT.facteurRoute);
         const s = dispo.reduce((m, x) => (km(x) < km(m) ? x : m));
-        setProche({ station: s, km: km(s), prix: s.carburants[VEHICULE.carburant]!.prix });
-        setSuivre(false);
+        setArrets([checkpoint(s, `la plus proche · ${km(s).toFixed(1)} km`), ...sansPlein]);
         return;
       }
       setErreur('Aucune station à moins de 30 km.');
@@ -145,7 +160,9 @@ export default function Conduite() {
     } finally { setCherche(false); }
   }
 
+  const pleinFait = () => { setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
   const livrer = () => { setArrets((a) => a.slice(1)); dernierCalcul.current = null; };
+  const prochain = arrets[0];
 
   return (
     <>
@@ -167,32 +184,21 @@ export default function Conduite() {
         </header>
 
         <div className="map">
-          <LiveMap position={position} trace={trace} arrets={arrets} classement={classement} suivre={suivre} proche={proche?.station}
+          <LiveMap position={position} trace={trace} arrets={arrets} classement={classement} suivre={suivre}
             onDeplacement={() => setSuivre(false)} />
           <div className="hud">
             <span className="chip">{erreur ?? (!position ? 'Signal GPS…' : !arrets.length ? 'Tournée terminée' :
-              `Livraison 1 à ${distanceKm(position, arrets[0], 1.3).toFixed(1)} km`)}</span>
+              `${prochain.plein ? 'Plein' : 'Livraison 1'} à ${distanceKm(position, prochain, 1.3).toFixed(1)} km`)}</span>
             <span className="chip">Autonomie {Math.round(autonomie)} km</span>
             {!suivre && <button onClick={() => setSuivre(true)}>Recentrer</button>}
           </div>
         </div>
 
         <div className="stack">
-          <button className="trouver" onClick={trouverStation} disabled={cherche || !position}>
-            {cherche ? 'Recherche…' : '⛽ Trouver la station la plus proche'}
+          <button className="trouver" onClick={ajouterPlein}
+            disabled={cherche || !position || !!pleinPrevu}>
+            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Arrêt plein ajouté à la tournée' : '⛽ Ajouter un arrêt plein'}
           </button>
-          {proche && (
-            <div className="proche">
-              <div className="k">Station la plus proche · {proche.km.toFixed(1).replace('.', ',')} km</div>
-              <div className="n">{nom(proche.station)}</div>
-              <div className="s">{proche.station.ville} · {proche.prix.toFixed(3)} €/L</div>
-              <div className="act">
-                <a target="_blank" rel="noreferrer"
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${proche.station.latitude},${proche.station.longitude}`}>Y aller</a>
-                <button className="ghost" onClick={() => setProche(null)}>Fermer</button>
-              </div>
-            </div>
-          )}
 
           <div className="jauge">
             <div className="top"><span>⛽ Carburant · comme au tableau de bord</span><span className="val">{Math.round(niveauL)} L</span></div>
@@ -209,14 +215,14 @@ export default function Conduite() {
 
           <ol className="liv">
             {arrets.map((l, i) => (
-              <li key={l.id}><span className="no">{i + 1}</span>
+              <li key={l.id}><span className="no" style={l.plein ? { background: '#ffaf00', color: '#1e1e1e' } : undefined}>{l.plein ? '⛽' : numLiv(l)}</span>
                 <span><span className="nm">{l.client}</span><br /><span className="ad">{l.adresse}</span></span>
-                {i === 0 ? <button onClick={livrer}>Livré</button> : <span />}
+                {l.plein ? <button onClick={pleinFait}>Plein fait</button> : i === 0 ? <button onClick={livrer}>Livré</button> : <span />}
               </li>
             ))}
           </ol>
 
-          {arrets.length > 0 && (best ? (
+          {livraisons.length > 0 && !pleinPrevu && (best ? (
             <div className="best">
               <div className="k">Meilleur plein de la tournée · {quand(best)}</div>
               <div className="n">{nom(best.station)}</div>
@@ -242,10 +248,10 @@ export default function Conduite() {
           <p className="note">Coût réel = plein + carburant du détour + temps du chauffeur. Recalculé tous les {RECALCUL_M} m.</p>
         </div>
 
-        {best && (
+        {prochain && (
           <a className="cta" target="_blank" rel="noreferrer"
-            href={`https://www.google.com/maps/dir/?api=1&destination=${best.station.latitude},${best.station.longitude}`}>
-            Y aller
+            href={`https://www.google.com/maps/dir/?api=1&destination=${prochain.lat},${prochain.lon}`}>
+            {prochain.plein ? 'Y aller · plein' : 'Y aller · livraison 1'}
           </a>
         )}
       </div>
