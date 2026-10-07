@@ -1,13 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { transformStationRecord } from '../../lib/stations';
 import { classerStations, distanceKm, HYPOTHESES_DEFAUT, Point } from '../../lib/cout';
-import { VEHICULES, TOURNEES } from '../../lib/tournee';
+import { VEHICULES, TOURNEES, Livraison } from '../../lib/tournee';
 import { StationData } from '../../types/station';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODELE = 'mistral-large-latest';
 
-interface Contexte { vehiculeId: number; tourneeId: string; position: Point; niveauL: number; coutHoraire: number }
+interface Contexte { vehiculeId: number; tourneeId: string; position: Point; niveauL: number; coutHoraire: number; livraisons?: Livraison[] }
 type Message = { role: string; content: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[]; tool_call_id?: string; name?: string };
 
 const OUTILS = [
@@ -39,13 +39,15 @@ async function stationsAutour(origin: string, a: Point, b: Point, carburant: str
 async function executer(nom: string, ctx: Contexte, origin: string) {
   const v = VEHICULES.find((x) => x.id === ctx.vehiculeId) ?? VEHICULES[0];
   const t = TOURNEES.find((x) => x.id === ctx.tourneeId) ?? TOURNEES[0];
-  const prochain = t.livraisons[0];
+  // livraisons restantes envoyées par la carte (sinon la tournée complète)
+  const restantes = ctx.livraisons?.length ? ctx.livraisons : t.livraisons;
+  const prochain = restantes[0] ?? ctx.position;
   const vehicule = { ...v, niveauL: ctx.niveauL };
   if (nom === 'etat_tournee') {
     return {
       vehicule: `${v.modele} (${v.type})`, conso_l_100km: v.consoL100, reservoir_l: v.reservoirL, niveau_l: ctx.niveauL,
       autonomie_km: Math.round((ctx.niveauL / v.consoL100) * 100 * 0.85),
-      livraisons: t.livraisons.map((l) => ({ client: l.client, adresse: l.adresse, distance_km: +distanceKm(ctx.position, l, 1.3).toFixed(1) })),
+      livraisons: restantes.map((l) => ({ client: l.client, adresse: l.adresse, distance_km: +distanceKm(ctx.position, l, 1.3).toFixed(1) })),
     };
   }
   if (nom === 'meilleure_station') {
@@ -58,7 +60,7 @@ async function executer(nom: string, ctx: Contexte, origin: string) {
       prix_perime: c.prixPerime, lat: c.station.latitude, lon: c.station.longitude,
     });
     return {
-      prochaine_livraison: prochain.client,
+      prochaine_livraison: 'client' in prochain ? prochain.client : 'fin de tournée',
       meilleure: fmt(liste[0]),
       moins_chere_au_litre: fmt(liste.reduce((m, x) => (x.prix < m.prix ? x : m))),
       plus_proche: fmt(liste.reduce((m, x) => (x.detourKm < m.detourKm ? x : m))),

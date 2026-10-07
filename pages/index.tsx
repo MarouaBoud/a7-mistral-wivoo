@@ -6,6 +6,8 @@ import { classerTournee, classerStations, distanceKm, eur, Point, CoutStationTou
 import { CONDUCTEURS, VEHICULES, TOURNEES, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
 import { StationData } from '../types/station';
 
+import Copilote, { Reco } from '../components/Copilote';
+
 const LiveMap = dynamic(() => import('../components/LiveMap'), { ssr: false });
 
 const RECALCUL_M = 500; // recalcul après 500 m parcourus
@@ -75,8 +77,16 @@ padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px
 .trajets span{font:500 11px var(--mono);color:var(--muted)}
 .setup .start{margin-top:auto;height:56px;border-radius:16px;background:var(--accent);color:#fff;font:400 16px var(--display);text-transform:uppercase;letter-spacing:.03em}
 .idcard{cursor:pointer}
-.copilote{position:absolute;z-index:1000;right:14px;top:calc(150px + env(safe-area-inset-top));width:52px;height:52px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-size:24px;text-decoration:none;box-shadow:0 4px 16px #fa500f66}
-@media (min-width:500px){.copilote{top:190px}}
+.cp-boutons{position:absolute;z-index:1100;right:14px;top:calc(150px + env(safe-area-inset-top));display:flex;flex-direction:column;align-items:center;gap:8px}
+.cp-micro{width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:28px;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 18px #fa500f66;transition:transform .15s}
+.cp-micro.ecoute{background:#e10500;transform:scale(1.15);animation:cp 1s infinite}
+.cp-micro.reflechit{background:var(--ink);color:var(--bg)}
+.cp-micro.parle{animation:cp 1.4s infinite}
+@keyframes cp{0%{box-shadow:0 0 0 0 #e1050088}100%{box-shadow:0 0 0 22px #e1050000}}
+.cp-hp{width:40px;height:40px;border-radius:50%;background:var(--surface);font-size:17px;box-shadow:0 2px 10px #0003}
+.cp-bulle{position:absolute;z-index:1100;left:14px;right:92px;top:calc(150px + env(safe-area-inset-top));background:var(--ink);color:var(--bg);border-radius:16px 16px 16px 4px;padding:10px 12px;font-size:14px;line-height:1.35;box-shadow:0 6px 20px #0004;max-height:180px;overflow:auto;cursor:pointer}
+.cp-k{display:block;font:500 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:#ffb000;margin-bottom:3px}
+@media (min-width:500px){.cp-boutons,.cp-bulle{top:190px}}
 /* Sur ordinateur : rendu dans un cadre iPhone */
 @media (min-width:500px){
  html,body{background:#d9d4c7}
@@ -106,7 +116,6 @@ export default function Conduite() {
   const [suivre, setSuivre] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const dernierCalcul = useRef<Point | null>(null);
-  const depuisAI = useRef(false);
   const simu = useRef(false); // true dès que le panneau de simulation pilote la position
   const [auto, setAuto] = useState(false);
   const [economise, setEconomise] = useState(0);
@@ -244,31 +253,21 @@ export default function Conduite() {
     setReglage(false);
   }
 
-  // Arrivée depuis le copilote IA : même profil, même trajet, station recommandée déjà en arrêt plein
   useEffect(() => {
     try {
-      const a = JSON.parse(localStorage.getItem('pj-depuis-ai') ?? 'null');
-      if (!a) return;
-      localStorage.removeItem('pj-depuis-ai');
-      depuisAI.current = true;
-      const t = TOURNEES.find((x) => x.id === a.choix.tournee) ?? TOURNEES[0];
-      const st = a.station;
-      setChoix(a.choix);
-      setCrans(a.crans);
-      setArrets([{ id: `plein-ai-${st.lat}`, plein: true, gain: a.gain, client: `⛽ Plein · ${st.adresse.split(',')[0]}`,
-        adresse: `${eur(st.cout_reel)} réel · détour ${st.detour_km.toFixed(1)} km · ${st.prix_litre.toFixed(3)} €/L`, lat: st.lat, lon: st.lon }, ...t.livraisons]);
-      simu.current = true; setSimulee(true); setPosition(t.depart); setTrace([]);
-      setReglage(false);
-    } catch { /* stockage indisponible */ }
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (depuisAI.current) return;
       const c = JSON.parse(localStorage.getItem('pj-choix') ?? 'null');
       if (c && CONDUCTEURS.some((x) => x.id === c.conducteur) && VEHICULES.some((x) => x.id === c.vehicule) && TOURNEES.some((x) => x.id === c.tournee)) setChoix(c);
     } catch { /* stockage indisponible */ }
   }, []);
+
+  // Le copilote vocal a recommandé une station : on l'insère comme prochain arrêt plein
+  function stationCopilote(m: Reco, ref?: Reco) {
+    const gain = ref && ref.adresse !== m.adresse ? { euros: ref.cout_reel - m.cout_reel, vs: 'la moins chère au litre' } : undefined;
+    setArrets((a) => [{ id: `plein-ai-${m.lat}-${m.lon}`, plein: true, gain, client: `⛽ Plein · ${m.adresse.split(',')[0]}`,
+      adresse: `${eur(m.cout_reel)} réel · détour ${m.detour_km.toFixed(1)} km · ${m.prix_litre.toFixed(3)} €/L`, lat: m.lat, lon: m.lon },
+      ...a.filter((x) => !x.plein)]);
+    setSuivre(true);
+  }
 
   const livrer = () => { setArrets((a) => a.slice(1)); dernierCalcul.current = null; };
   const prochain = arrets[0];
@@ -327,7 +326,10 @@ export default function Conduite() {
           </div>
         )}
 
-        {!reglage && <a className="copilote" href="/parcoursai" aria-label="Copilote vocal">🎙️</a>}
+        {!reglage && (
+          <Copilote onStation={stationCopilote}
+            contexte={{ vehiculeId: VEHICULE.id, tourneeId: TOURNEE.id, position: position ?? TOURNEE.depart, niveauL, coutHoraire: horaire, livraisons }} />
+        )}
 
         <div className="sheet">
           <div className="grab" />
