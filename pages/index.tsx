@@ -75,6 +75,8 @@ padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px
 .trajets span{font:500 11px var(--mono);color:var(--muted)}
 .setup .start{margin-top:auto;height:56px;border-radius:16px;background:var(--accent);color:#fff;font:400 16px var(--display);text-transform:uppercase;letter-spacing:.03em}
 .idcard{cursor:pointer}
+.copilote{position:absolute;z-index:1000;right:14px;top:calc(150px + env(safe-area-inset-top));width:52px;height:52px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-size:24px;text-decoration:none;box-shadow:0 4px 16px #fa500f66}
+@media (min-width:500px){.copilote{top:190px}}
 /* Sur ordinateur : rendu dans un cadre iPhone */
 @media (min-width:500px){
  html,body{background:#d9d4c7}
@@ -104,6 +106,7 @@ export default function Conduite() {
   const [suivre, setSuivre] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const dernierCalcul = useRef<Point | null>(null);
+  const depuisAI = useRef(false);
   const simu = useRef(false); // true dès que le panneau de simulation pilote la position
   const [auto, setAuto] = useState(false);
   const [economise, setEconomise] = useState(0);
@@ -241,8 +244,27 @@ export default function Conduite() {
     setReglage(false);
   }
 
+  // Arrivée depuis le copilote IA : même profil, même trajet, station recommandée déjà en arrêt plein
   useEffect(() => {
     try {
+      const a = JSON.parse(localStorage.getItem('pj-depuis-ai') ?? 'null');
+      if (!a) return;
+      localStorage.removeItem('pj-depuis-ai');
+      depuisAI.current = true;
+      const t = TOURNEES.find((x) => x.id === a.choix.tournee) ?? TOURNEES[0];
+      const st = a.station;
+      setChoix(a.choix);
+      setCrans(a.crans);
+      setArrets([{ id: `plein-ai-${st.lat}`, plein: true, gain: a.gain, client: `⛽ Plein · ${st.adresse.split(',')[0]}`,
+        adresse: `${eur(st.cout_reel)} réel · détour ${st.detour_km.toFixed(1)} km · ${st.prix_litre.toFixed(3)} €/L`, lat: st.lat, lon: st.lon }, ...t.livraisons]);
+      simu.current = true; setSimulee(true); setPosition(t.depart); setTrace([]);
+      setReglage(false);
+    } catch { /* stockage indisponible */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (depuisAI.current) return;
       const c = JSON.parse(localStorage.getItem('pj-choix') ?? 'null');
       if (c && CONDUCTEURS.some((x) => x.id === c.conducteur) && VEHICULES.some((x) => x.id === c.vehicule) && TOURNEES.some((x) => x.id === c.tournee)) setChoix(c);
     } catch { /* stockage indisponible */ }
@@ -304,6 +326,8 @@ export default function Conduite() {
             <button className="start" onClick={demarrer}>Démarrer la tournée</button>
           </div>
         )}
+
+        {!reglage && <a className="copilote" href="/parcoursai" aria-label="Copilote vocal">🎙️</a>}
 
         <div className="sheet">
           <div className="grab" />

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { CONDUCTEURS, VEHICULES, TOURNEES, GRADUATIONS_JAUGE } from '../lib/tournee';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -18,6 +19,7 @@ html,body{margin:0;height:100%;background:var(--bg)}
 .ai{position:fixed;inset:0;display:flex;flex-direction:column;color:var(--ink);font:15px/1.4 var(--body);background:var(--bg)}
 .ai button,.ai select,.ai input{font-family:inherit}
 .hd{padding:calc(12px + env(safe-area-inset-top)) 16px 10px;background:var(--ink);color:var(--bg)}
+.retour{float:right;color:#ffb000;font:500 12px var(--mono);text-decoration:none;margin-top:4px}
 .hd h1{font:400 20px var(--display);margin:0}.hd .sub{font:500 11px var(--mono);opacity:.7}
 .ctx{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
 .ctx select{font-size:13px;padding:6px;border-radius:8px;border:0;background:#2c2620;color:#fff3d9;min-width:0}
@@ -30,6 +32,7 @@ html,body{margin:0;height:100%;background:var(--bg)}
 .outil{align-self:flex-start;font:500 11px var(--mono);color:var(--muted)}
 .sugg{display:flex;flex-direction:column;gap:6px}
 .sugg button{text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.carte{align-self:stretch;border:0;border-radius:14px;padding:14px;background:var(--ink);color:var(--bg);font:400 14px var(--display);text-transform:uppercase;letter-spacing:.02em;cursor:pointer;text-align:left}
 .err{color:#e10500;font-size:13px}
 .voix{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line);background:var(--surface)}
 .micro{width:72px;height:72px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:30px;cursor:pointer;flex:none;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 18px #fa500f55;transition:transform .15s}
@@ -54,6 +57,9 @@ export default function ParcoursAI() {
   const [crans, setCrans] = useState(1);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [outils, setOutils] = useState<string[]>([]);
+  type Reco = { adresse: string; prix_litre: number; detour_km: number; cout_reel: number; lat: number; lon: number };
+  const [reco, setReco] = useState<{ meilleure: Reco; moins_chere_au_litre: Reco } | null>(null);
+  const router = useRouter();
   const [texte, setTexte] = useState('');
   const [attente, setAttente] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -83,6 +89,8 @@ export default function ParcoursAI() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setOutils(d.outils.map((o: { nom: string }) => o.nom));
+      const res = [...d.outils].reverse().find((o: { nom: string; resultat: { meilleure?: Reco } }) => o.nom === 'meilleure_station' && o.resultat.meilleure);
+      if (res) setReco(res.resultat);
       setMessages([...fil, { role: 'assistant', content: d.reponse }]);
       if (voixOn) parler(d.reponse);
     } catch (e) {
@@ -149,6 +157,19 @@ export default function ParcoursAI() {
     setEcoute(false);
   }
 
+  // Passe la station recommandée à la carte (page d'accueil), avec le même profil et le même trajet
+  function voirSurCarte() {
+    if (!reco) return;
+    const m = reco.meilleure, ref = reco.moins_chere_au_litre;
+    try {
+      localStorage.setItem('pj-depuis-ai', JSON.stringify({
+        choix: { conducteur, vehicule: vehiculeId, tournee: tourneeId }, crans,
+        station: m, gain: ref && ref.adresse !== m.adresse ? { euros: ref.cout_reel - m.cout_reel, vs: 'la moins chère au litre' } : undefined,
+      }));
+    } catch { /* stockage indisponible */ }
+    router.push('/');
+  }
+
   return (
     <>
       <Head>
@@ -159,6 +180,7 @@ export default function ParcoursAI() {
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="ai">
         <div className="hd">
+          <a href="/" className="retour">← Carte</a>
           <h1>Copilote PleinJuste</h1>
           <div className="sub">{c.prenom} {c.nom} · Mistral + Voxtral</div>
           <div className="ctx">
@@ -188,6 +210,7 @@ export default function ParcoursAI() {
           )}
           {messages.map((m, i) => <div key={i} className={`b ${m.role}`}>{m.content}</div>)}
           {!attente && outils.length > 0 && <div className="outil">🔧 {outils.join(' · ')}</div>}
+          {!attente && reco && <button className="carte" onClick={voirSurCarte}>🗺️ Voir sur la carte · {reco.meilleure.adresse}</button>}
           {attente && <div className="b assistant">…</div>}
           {erreur && <div className="err">{erreur}</div>}
           <div ref={fin} />
