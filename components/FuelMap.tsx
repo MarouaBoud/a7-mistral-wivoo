@@ -1,11 +1,24 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { StationData } from '../types/station';
 import { formatPrice, formatDate } from '../lib/stations';
+
+// Cache for fuel icons to prevent recreation on every render
+const fuelIconCache: Record<string, L.Icon> = {};
+
+// Color mapping for fuel types
+const FUEL_COLORS: Record<string, string> = {
+  gazole: '%2328a745',
+  sp95: '%23ffc107',
+  sp98: '%23fd7e14',
+  e10: '%2317a2b8',
+  e85: '%236f42c1',
+  gplc: '%230070f3',
+};
 
 // Fix for default marker icons in Next.js
 // This is necessary because Leaflet's default icon paths don't work in Next.js
@@ -22,27 +35,24 @@ const fixLeafletIcons = () => {
   };
 };
 
-// Custom SVG icon for fuel stations
-const createFuelIcon = (fuelType?: string) => {
-  const color = fuelType === 'gazole'
-    ? '%2328a745'
-    : fuelType === 'sp95'
-      ? '%23ffc107'
-      : fuelType === 'sp98'
-        ? '%23fd7e14'
-        : fuelType === 'e10'
-          ? '%2317a2b8'
-          : fuelType === 'e85'
-            ? '%236f42c1'
-            : '%230070f3';
+// Custom SVG icon for fuel stations - memoized to prevent recreation
+const createFuelIcon = (fuelType: string = 'gazole'): L.Icon => {
+  if (fuelIconCache[fuelType]) {
+    return fuelIconCache[fuelType];
+  }
 
-  return L.icon({
+  const color = FUEL_COLORS[fuelType] || FUEL_COLORS.gazole;
+
+  const icon = L.icon({
     iconUrl: `data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="${color}"/><text x="16" y="18" text-anchor="middle" fill="white" font-size="8" font-weight="bold">F</text></svg>`,
     iconSize: [25, 25],
     iconAnchor: [12.5, 25],
     popupAnchor: [0, -25],
     className: 'fuel-marker-icon',
   });
+
+  fuelIconCache[fuelType] = icon;
+  return icon;
 };
 
 // Component to handle map view changes
@@ -55,6 +65,73 @@ function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }
 
   return null;
 }
+
+// Display names for fuel types
+const FUEL_DISPLAY_NAMES: Record<string, string> = {
+  gazole: 'Gazole',
+  sp95: 'SP95',
+  sp98: 'SP98',
+  e10: 'E10',
+  e85: 'E85',
+  gplc: 'GPLc',
+};
+
+// Station popup component extracted for better readability
+const StationPopup: React.FC<{ station: StationData; fuelType: string; fuelData: { prix: number; dateMaj: string; enRupture: boolean } }> = ({ station, fuelType, fuelData }) => {
+  const carburants = station.carburants;
+
+  return (
+    <div className="station-popup">
+      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+        {station.nom}
+      </h3>
+      <p style={{ margin: '4px 0', fontSize: '14px' }}>
+        {station.adresse}, {station.codePostal} {station.ville}
+      </p>
+      <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ccc' }} />
+
+      <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+        Meilleur prix :
+      </h4>
+
+      <div style={{ marginBottom: '4px' }}>
+        <strong>{FUEL_DISPLAY_NAMES[fuelType] || fuelType.toUpperCase()}:</strong> {formatPrice(fuelData.prix)} €/L
+      </div>
+      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+        Mis à jour: {formatDate(fuelData.dateMaj)}
+      </div>
+
+      <h4 style={{ margin: '8px 0 4px 0', fontSize: '14px', fontWeight: 'bold' }}>
+        Autres carburants :
+      </h4>
+
+      <div style={{ maxHeight: '100px', overflowY: 'auto' }}>
+        {Object.entries(carburants)
+          .filter(([type]) => type !== fuelType)
+          .map(([type, data]) => {
+            if (!data) return null;
+
+            return (
+              <div
+                key={type}
+                style={{
+                  margin: '2px 0',
+                  fontSize: '12px',
+                  padding: '2px 4px',
+                  backgroundColor: data.enRupture ? '#fee' : 'transparent',
+                }}
+              >
+                <strong>{FUEL_DISPLAY_NAMES[type] || type.toUpperCase()}:</strong> {formatPrice(data.prix)} €/L
+                {data.enRupture && ' (Rupture)'}
+                <br />
+                <small>Mis à jour: {formatDate(data.dateMaj)}</small>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+};
 
 interface FuelMapProps {
   stations: StationData[];
@@ -94,10 +171,12 @@ const FuelMap: React.FC<FuelMapProps> = ({
     );
   }
 
-  // Filter and prepare fuel data for each station
-  const stationsWithValidFuel = stations.filter(station => {
-    return Object.values(station.carburants).some(fuel => fuel && !fuel.enRupture);
-  });
+  // Filter and prepare fuel data for each station - memoized
+  const stationsWithValidFuel = useMemo(() => {
+    return stations.filter(station => {
+      return Object.values(station.carburants).some(fuel => fuel && !fuel.enRupture);
+    });
+  }, [stations]);
 
   return (
     <div style={{ width: '100%', height: height, position: 'relative' }}>
@@ -120,9 +199,9 @@ const FuelMap: React.FC<FuelMapProps> = ({
           const validFuels = Object.entries(carburants)
             .filter(([, data]) => data && !data.enRupture)
             .sort((a, b) => a[1].prix - b[1].prix);
-          
+
           if (validFuels.length === 0) return null;
-          
+
           const [fuelType, fuelData] = validFuels[0];
 
           return (
@@ -133,55 +212,7 @@ const FuelMap: React.FC<FuelMapProps> = ({
               icon={createFuelIcon(fuelType)}
             >
               <Popup>
-                <div className="station-popup">
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                    {station.nom}
-                  </h3>
-                  <p style={{ margin: '4px 0', fontSize: '14px' }}>
-                    {station.adresse}, {station.codePostal} {station.ville}
-                  </p>
-                  <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid #ccc' }} />
-
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
-                    Meilleur prix :
-                  </h4>
-
-                  <div style={{ marginBottom: '4px' }}>
-                    <strong>{fuelType.toUpperCase()}:</strong> {formatPrice(fuelData.prix)} €/L
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-                    Mis à jour: {formatDate(fuelData.dateMaj)}
-                  </div>
-
-                  <h4 style={{ margin: '8px 0 4px 0', fontSize: '14px', fontWeight: 'bold' }}>
-                    Autres carburants :
-                  </h4>
-
-                  <div style={{ maxHeight: '100px', overflowY: 'auto' }}>
-                    {Object.entries(carburants)
-                      .filter(([type]) => type !== fuelType)
-                      .map(([type, data]) => {
-                        if (!data) return null;
-                        
-                        return (
-                          <div
-                            key={type}
-                            style={{
-                              margin: '2px 0',
-                              fontSize: '12px',
-                              padding: '2px 4px',
-                              backgroundColor: data.enRupture ? '#fee' : 'transparent',
-                            }}
-                          >
-                            <strong>{type.toUpperCase()}:</strong> {formatPrice(data.prix)} €/L
-                            {data.enRupture && ' (Rupture)'}
-                            <br />
-                            <small>Mis à jour: {formatDate(data.dateMaj)}</small>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
+                <StationPopup station={station} fuelType={fuelType} fuelData={fuelData} />
               </Popup>
             </Marker>
           );
