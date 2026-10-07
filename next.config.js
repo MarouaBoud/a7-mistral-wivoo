@@ -5,9 +5,6 @@ const nextConfig = {
     unoptimized: true,
     domains: ['tile.openstreetmap.org'],
   },
-  experimental: {
-    serverActions: true,
-  },
 };
 
 module.exports = nextConfig;
