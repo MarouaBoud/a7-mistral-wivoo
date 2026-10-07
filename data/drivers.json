@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "nom": "Dupont",
+    "prenom": "Jean"
+  },
+  {
+    "id": 2,
+    "nom": "Martin",
+    "prenom": "Marie"
+  },
+  {
+    "id": 3,
+    "nom": "Bernard",
+    "prenom": "Pierre"
+  },
+  {
+    "id": 4,
+    "nom": "Durand",
+    "prenom": "Sophie"
+  },
+  {
+    "id": 5,
+    "nom": "Lefevre",
+    "prenom": "Thomas"
+  }
+]
