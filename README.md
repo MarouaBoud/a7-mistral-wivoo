@@ -1,11 +1,11 @@
-# A7 Fuel Optimizer - Intégration Carte & Stations-Service
+# PleinPot - Intégration Carte & Stations-Service
 
 Projet Next.js pour l'optimisation du choix des stations-service en tenant compte du coût réel incluant le détour.
 
 ## Structure du Projet
 
 ```
-a7-mistral-wivoo/
+pleinpot/
 ├── components/
 │   └── FuelMap.tsx              # Composant carte Leaflet avec stations
 ├── lib/
@@ -72,7 +72,7 @@ a7-mistral-wivoo/
 1. **Cloner le dépôt** (si applicable)
 2. **Installer les dépendances** :
    ```bash
-   cd a7-mistral-wivoo
+   cd pleinpot
    npm install
    ```
 
