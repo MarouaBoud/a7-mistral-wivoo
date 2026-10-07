@@ -8,6 +8,7 @@ import { StationData } from '../types/station';
 
 const LiveMap = dynamic(() => import('../components/LiveMap'), { ssr: false });
 
+const POSITION_SIMULEE = { lat: 48.8584, lon: 2.3470 }; // Châtelet
 const RECALCUL_M = 500; // recalcul après 500 m parcourus
 
 const CSS = `
@@ -88,7 +89,12 @@ export default function Conduite() {
         setTrace((t) => (t.length && distanceKm(t[t.length - 1], pt, 1) < 0.01 ? t : [...t, pt]));
         setErreur(null);
       },
-      (e) => setErreur(e.code === 1 ? 'Autorise la localisation pour voir ton trajet.' : `GPS : ${e.message}`),
+      (e) => {
+        // Sans GPS (refus, ordinateur, http sur mobile) : position simulée près de la 1re livraison pour la démo
+        setPosition((p) => p ?? POSITION_SIMULEE);
+        setSimulee(true);
+        setErreur(e.code === 1 ? 'Localisation refusée · position simulée' : 'GPS indisponible · position simulée');
+      },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
     return () => navigator.geolocation.clearWatch(id);
@@ -124,6 +130,7 @@ export default function Conduite() {
   const numLiv = (l: Livraison) => livraisons.indexOf(l) + 1;
 
   const [cherche, setCherche] = useState(false);
+  const [simulee, setSimulee] = useState(false);
 
   const checkpoint = (st: StationData, label: string): Livraison => ({
     id: `plein-${st.id}`, plein: true, client: `⛽ Plein · ${nom(st)}`,
@@ -134,18 +141,19 @@ export default function Conduite() {
   // Le conducteur décide quand faire le plein : on cherche, depuis sa position actuelle, la station au
   // meilleur coût réel sur le chemin de sa prochaine livraison, et on l'insère comme prochain arrêt.
   async function pleinMaintenant() {
-    if (!position) { setErreur('Position GPS inconnue.'); return; }
+    const position_ = position ?? POSITION_SIMULEE;
+    if (!position) { setPosition(position_); setSimulee(true); }
     const sansPlein = arrets.filter((a) => !a.plein);
-    const cible = sansPlein[0] ?? position; // tournée finie : simple aller-retour
+    const cible = sansPlein[0] ?? position_; // tournée finie : simple aller-retour
     setCherche(true);
     try {
       for (const marge of [3, 10, 30]) {
-        const mid = { lat: (position.lat + cible.lat) / 2, lon: (position.lon + cible.lon) / 2 };
-        const rayon = Math.min(100, distanceKm(position, cible, 1) / 2 + marge);
+        const mid = { lat: (position_.lat + cible.lat) / 2, lon: (position_.lon + cible.lon) / 2 };
+        const rayon = Math.min(100, distanceKm(position_, cible, 1) / 2 + marge);
         const q = new URLSearchParams({ lat: `${mid.lat}`, lon: `${mid.lon}`, rayon: `${rayon}`, carburant: VEHICULE.carburant, limit: '100' });
         const d = await (await fetch(`/api/stations?${q}`)).json();
         if (d.error) throw new Error(d.error);
-        const c = classerStations(d.results.map(transformStationRecord), position, cible, { ...VEHICULE, niveauL },
+        const c = classerStations(d.results.map(transformStationRecord), position_, cible, { ...VEHICULE, niveauL },
           { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })[0];
         if (!c) continue;
         setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`), ...sansPlein]);
@@ -193,7 +201,7 @@ export default function Conduite() {
         </div>
 
         <div className="stack">
-          <button className="trouver" onClick={pleinMaintenant} disabled={cherche || !position}>
+          <button className="trouver" onClick={pleinMaintenant} disabled={cherche}>
             {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Rechercher à nouveau depuis ici' : '⛽ Faire le plein maintenant'}
           </button>
 
