@@ -25,7 +25,7 @@ export default async function handler(
       });
     }
 
-    const params: SearchParams = {
+    const params: SearchParams & { limit: number } = {
       lat: parseFloat(lat as string),
       lon: parseFloat(lon as string),
       rayon: parseFloat(rayon as string),
@@ -123,11 +123,11 @@ export default async function handler(
       // Filter out stations with no valid prices or with fuel shortages
       const validStations = data.results.filter((record: StationRecord) => {
         // Check if the station has at least one valid fuel price that's not in shortage
-        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
+        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'] as const;
         
         for (const fuel of fuels) {
-          const prix = record[`${fuel}_prix` as keyof StationRecord];
-          const rupture = record[`${fuel}_rupture` as keyof StationRecord];
+          const prix = record[`${fuel}_prix`];
+          const rupture = record[`${fuel}_rupture`];
           
           if (prix !== null && prix > 0 && !rupture) {
             return true; // At least one valid fuel
