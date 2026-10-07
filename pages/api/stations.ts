@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { StationRecord, ApiResponse, SearchParams } from '../../../types/station';
+import { StationRecord, ApiResponse, SearchParams } from '../../types/station';
 
 const DATA_GOUV_API_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records';
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
@@ -25,7 +25,7 @@ export default async function handler(
       });
     }
 
-    const params: SearchParams = {
+    const params: SearchParams & { limit: number } = {
       lat: parseFloat(lat as string),
       lon: parseFloat(lon as string),
       rayon: parseFloat(rayon as string),
@@ -117,7 +117,7 @@ export default async function handler(
       // Filter out stations with no valid prices or with fuel shortages
       const validStations = data.results.filter((record: StationRecord) => {
         // Check if the station has at least one valid fuel price that's not in shortage
-        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
+        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'] as const;
         
         for (const fuel of fuels) {
           const prix = record[`${fuel}_prix`];
@@ -146,7 +146,7 @@ export default async function handler(
     } catch (error) {
       clearTimeout(timeoutId);
       
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return res.status(504).json({ 
           error: 'Request to external API timed out' 
         });
