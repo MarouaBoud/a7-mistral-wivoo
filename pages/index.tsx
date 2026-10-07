@@ -218,9 +218,9 @@ export default function Conduite() {
             {crans > 0 && (
               <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? 'Recherche…' : '⛽ Trouver la station'}</button>
             )}
-            {prochain && (
+            {crans > 0 && pleinPrevu && (
               <a className="go" target="_blank" rel="noreferrer"
-                href={`https://maps.apple.com/?daddr=${prochain.lat},${prochain.lon}&dirflg=d`}>Y aller</a>
+                href={`https://maps.apple.com/?daddr=${pleinPrevu.lat},${pleinPrevu.lon}&dirflg=d`}>Y aller</a>
             )}
           </div>
         </div>
