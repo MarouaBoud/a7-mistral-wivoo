@@ -39,7 +39,7 @@ export default function LiveMap({ position, trace, arrets, suivre, onDeplacement
   const apresPlein = livraisons[0];
   return (
     <MapContainer center={[48.8566, 2.3522]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-      <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" attribution="© OpenStreetMap © CARTO" />
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
       <Suivi position={position} suivre={suivre} plein={plein} onDeplacement={onDeplacement} />
       {trace.length > 1 && <Polyline positions={trace.map((p) => [p.lat, p.lon])} pathOptions={{ color: '#1e1e1e', weight: 4, opacity: 0.5 }} />}
 
