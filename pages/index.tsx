@@ -207,7 +207,7 @@ export default function Conduite() {
 
   useEffect(() => {
     if (!auto) return;
-    const id = setInterval(() => deplacer(120), 700);
+    const id = setInterval(() => deplacer(400), 300);
     return () => clearInterval(id);
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
