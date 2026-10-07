@@ -25,13 +25,15 @@ export default async function handler(
       });
     }
 
-    const params: SearchParams = {
+    const params: SearchParams & { limit: number } = {
       lat: parseFloat(lat as string),
       lon: parseFloat(lon as string),
       rayon: parseFloat(rayon as string),
       carburant: carburant as string | undefined,
       limit: limit ? parseInt(limit as string) : DEFAULT_LIMIT,
     };
+    
+    const normalizedLimit = Number.isFinite(params.limit) ? params.limit : DEFAULT_LIMIT;
 
     // Validate parameters
     if (isNaN(params.lat) || isNaN(params.lon) || isNaN(params.rayon)) {
@@ -46,7 +48,7 @@ export default async function handler(
       });
     }
 
-    if (params.limit <= 0 || params.limit > MAX_LIMIT) {
+    if (normalizedLimit <= 0 || normalizedLimit > MAX_LIMIT) {
       return res.status(400).json({ 
         error: `Invalid limit: must be between 0 and ${MAX_LIMIT}` 
       });
@@ -69,7 +71,7 @@ export default async function handler(
     if (params.carburant) clauses.push(`${params.carburant}_prix is not null`);
     const url = new URL(DATA_GOUV_API_URL);
     url.searchParams.append('where', clauses.join(' and '));
-    url.searchParams.append('limit', String(params.limit));
+    url.searchParams.append('limit', String(normalizedLimit));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -109,7 +111,7 @@ export default async function handler(
       // Filter out stations with no valid prices or with fuel shortages
       const validStations = data.results.filter((record: StationRecord) => {
         // Check if the station has at least one valid fuel price that's not in shortage
-        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
+        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'] as const;
         
         for (const fuel of fuels) {
           const prix = record[`${fuel}_prix`];
@@ -124,11 +126,11 @@ export default async function handler(
       });
 
       // Limit results to the requested limit
-      const limitedResults = validStations.slice(0, params.limit);
+      const limitedResults = validStations.slice(0, normalizedLimit);
 
       res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes cache
       res.setHeader('X-Data-Source', 'data.economie.gouv.fr');
-      res.setHeader('X-Results-Total', data.results?.length.toString() || '0');
+      res.setHeader('X-Results-Total', (data.results?.length || 0).toString());
       
       return res.status(200).json({
         results: limitedResults,
@@ -138,7 +140,7 @@ export default async function handler(
     } catch (error) {
       clearTimeout(timeoutId);
       
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return res.status(504).json({ 
           error: 'Request to external API timed out' 
         });

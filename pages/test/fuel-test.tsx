@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import FuelMap from '../../components/FuelMap';
+import dynamic from 'next/dynamic';
 import { StationData } from '../../types/station';
 import { transformStationRecord, formatPrice, formatDate } from '../../lib/stations';
+
+// Leaflet touches window on import, so the map must only load in the browser
+const FuelMap = dynamic(() => import('../../components/FuelMap'), { ssr: false });
 
 const FuelTestPage: React.FC = () => {
   const [stations, setStations] = useState<StationData[]>([]);
@@ -46,7 +49,7 @@ const FuelTestPage: React.FC = () => {
       if (data.results && Array.isArray(data.results)) {
         const transformedStations = data.results
           .map(transformStationRecord)
-          .filter(station => Object.keys(station.carburants).length > 0);
+          .filter((station: StationData) => Object.keys(station.carburants).length > 0);
         
         setStations(transformedStations);
         

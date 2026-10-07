@@ -1,0 +1,90 @@
+[
+  {
+    "id": 1,
+    "modele": "Renault Master",
+    "type": "Fourgon",
+    "carburant": "Diesel",
+    "consommation": 8.5,
+    "capacite_kg": 1500,
+    "volume_m3": 12,
+    "autonomie_km": 800,
+    "annee": 2020
+  },
+  {
+    "id": 2,
+    "modele": "Mercedes Sprinter",
+    "type": "Camion benne",
+    "carburant": "Diesel",
+    "consommation": 10.2,
+    "capacite_kg": 3500,
+    "volume_m3": 20,
+    "autonomie_km": 1000,
+    "annee": 2019
+  },
+  {
+    "id": 3,
+    "modele": "Peugeot Boxer",
+    "type": "Fourgon frigorifique",
+    "carburant": "Diesel",
+    "consommation": 9.8,
+    "capacite_kg": 1200,
+    "volume_m3": 10,
+    "autonomie_km": 750,
+    "annee": 2021
+  },
+  {
+    "id": 4,
+    "modele": "Volkswagen Crafter",
+    "type": "Camion plateau",
+    "carburant": "Diesel",
+    "consommation": 11.0,
+    "capacite_kg": 4500,
+    "volume_m3": 25,
+    "autonomie_km": 900,
+    "annee": 2020
+  },
+  {
+    "id": 5,
+    "modele": "Fiat Ducato",
+    "type": "Fourgon",
+    "carburant": "Diesel",
+    "consommation": 8.2,
+    "capacite_kg": 1400,
+    "volume_m3": 11,
+    "autonomie_km": 850,
+    "annee": 2022
+  },
+  {
+    "id": 6,
+    "modele": "Toyota Hilux",
+    "type": "Pickup",
+    "carburant": "Diesel",
+    "consommation": 7.5,
+    "capacite_kg": 1000,
+    "volume_m3": 2.5,
+    "autonomie_km": 900,
+    "annee": 2021
+  },
+  {
+    "id": 7,
+    "modele": "Iveco Daily",
+    "type": "Camion ridelle",
+    "carburant": "Diesel",
+    "consommation": 12.5,
+    "capacite_kg": 5000,
+    "volume_m3": 30,
+    "autonomie_km": 700,
+    "annee": 2018
+  },
+  {
+    "id": 8,
+    "modele": "CitROEN Jumper",
+    "type": "Fourgon longue",
+    "carburant": "Diesel",
+    "consommation": 9.3,
+    "capacite_kg": 1800,
+    "volume_m3": 15,
+    "autonomie_km": 800,
+    "annee": 2020
+  }
+]
