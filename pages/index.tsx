@@ -105,7 +105,6 @@ export default function Conduite() {
         // Sans GPS (refus, ordinateur, http sur mobile) : position simulée près de la 1re livraison pour la démo
         setPosition((p) => p ?? POSITION_SIMULEE);
         setSimulee(true);
-        setErreur(e.code === 1 ? 'Localisation refusée · position simulée' : 'GPS indisponible · position simulée');
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
@@ -185,7 +184,7 @@ export default function Conduite() {
     setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
   // Simulateur (ordinateur) : déplace le camion de pasM mètres vers le prochain arrêt
   function deplacer(pasM: number, cap?: [number, number]) {
-    simu.current = true; setSimulee(true); setErreur('Simulation');
+    simu.current = true; setSimulee(true);
     const depart = position ?? POSITION_SIMULEE;
     const cible = arrets[0];
     let pt: Point;
