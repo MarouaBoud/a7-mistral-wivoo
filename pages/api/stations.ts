@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { StationRecord, ApiResponse, SearchParams } from '../../../types/station';
+import { StationRecord, ApiResponse, SearchParams } from '../../types/station';
 
 const DATA_GOUV_API_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records';
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
@@ -65,29 +65,11 @@ export default async function handler(
       });
     }
 
-    // Build the geofilter using the API syntax
-    // The API uses a geofilter with distance parameter in meters
-    const radiusMeters = params.rayon * 1000;
-    const geoFilter = `geofilter(distance,${params.lon},${params.lat},${radiusMeters})`;
-
-    // Build the query URL
+    const clauses = [`within_distance(geom, geom'POINT(${params.lon} ${params.lat})', ${params.rayon}km)`];
+    if (params.carburant) clauses.push(`${params.carburant}_prix is not null`);
     const url = new URL(DATA_GOUV_API_URL);
-    url.searchParams.append('where', geoFilter);
-    url.searchParams.append('limit', params.limit.toString());
-    
-    // Add fuel type filter if specified
-    if (params.carburant) {
-      const fuelPrixField = `${params.carburant}_prix`;
-      const fuelMajField = `${params.carburant}_maj`;
-      url.searchParams.append('where', `${fuelPrixField} is not null and ${fuelMajField} is not null`);
-    } else {
-      // If no specific fuel, ensure at least one fuel has a valid price
-      url.searchParams.append('where', 'gazole_prix is not null or sp95_prix is not null or sp98_prix is not null or e10_prix is not null or e85_prix is not null or gplc_prix is not null');
-    }
-
-    // Add sorting by price (ascending) for the default fuel
-    const sortField = params.carburant ? `${params.carburant}_prix` : 'gazole_prix';
-    url.searchParams.append('order_by', `${sortField} asc`);
+    url.searchParams.append('where', clauses.join(' and '));
+    url.searchParams.append('limit', String(params.limit));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -113,6 +95,16 @@ export default async function handler(
           error: 'Invalid API response format' 
         });
       }
+
+      // Normalise le schéma data.gouv (cp, *_rupture_type, pas de nom) vers StationRecord
+      const FUELS = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
+      data.results = data.results.map((r: any) => ({
+        ...r,
+        id: String(r.id),
+        nom: r.nom ?? '',
+        code_postal: r.cp,
+        ...Object.fromEntries(FUELS.map((f) => [`${f}_rupture`, r[`${f}_rupture_type`] != null])),
+      }));
 
       // Filter out stations with no valid prices or with fuel shortages
       const validStations = data.results.filter((record: StationRecord) => {

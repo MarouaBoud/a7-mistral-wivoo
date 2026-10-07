@@ -31,7 +31,7 @@ du coût réel incluant le détour et le temps du chauffeur.
         marginBottom: '40px'
       }}>
         <Link
-          href="/test/fuel-test"
+          href="/comparateur"
           style={{ 
             padding: '15px 30px', 
             backgroundColor: '#0070f3',
@@ -49,7 +49,7 @@ du coût réel incluant le détour et le temps du chauffeur.
             (e.target as HTMLElement).style.backgroundColor = '#0070f3';
           }}
         >
-          Test Carte & Stations
+          Comparer les stations (coût réel)
         </Link>
 
         <p style={{ color: '#888', fontSize: '14px' }}>
