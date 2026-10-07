@@ -126,8 +126,8 @@ export default async function handler(
         const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'] as const;
         
         for (const fuel of fuels) {
-          const prix = record[`${fuel}_prix` as keyof StationRecord];
-          const rupture = record[`${fuel}_rupture` as keyof StationRecord];
+          const prix = record[`${fuel}_prix`];
+          const rupture = record[`${fuel}_rupture`];
           
           if (prix !== null && prix > 0 && !rupture) {
             return true; // At least one valid fuel
