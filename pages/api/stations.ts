@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { StationRecord, ApiResponse, SearchParams } from '../../../types/station';
+import { StationRecord, ApiResponse, SearchParams } from '../../types/station';
 
 const DATA_GOUV_API_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records';
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
@@ -32,6 +32,8 @@ export default async function handler(
       carburant: carburant as string | undefined,
       limit: limit ? parseInt(limit as string) : DEFAULT_LIMIT,
     };
+    
+    const normalizedLimit = Number.isFinite(params.limit) ? params.limit : DEFAULT_LIMIT;
 
     // Validate parameters
     if (isNaN(params.lat) || isNaN(params.lon) || isNaN(params.rayon)) {
@@ -46,7 +48,7 @@ export default async function handler(
       });
     }
 
-    if (params.limit <= 0 || params.limit > MAX_LIMIT) {
+    if (normalizedLimit <= 0 || normalizedLimit > MAX_LIMIT) {
       return res.status(400).json({ 
         error: `Invalid limit: must be between 0 and ${MAX_LIMIT}` 
       });
@@ -70,20 +72,24 @@ export default async function handler(
     const radiusMeters = params.rayon * 1000;
     const geoFilter = `geofilter(distance,${params.lon},${params.lat},${radiusMeters})`;
 
-    // Build the query URL
-    const url = new URL(DATA_GOUV_API_URL);
-    url.searchParams.append('where', geoFilter);
-    url.searchParams.append('limit', params.limit.toString());
-    
-    // Add fuel type filter if specified
+    // Build the fuel filter condition
+    let fuelCondition = '';
     if (params.carburant) {
       const fuelPrixField = `${params.carburant}_prix`;
       const fuelMajField = `${params.carburant}_maj`;
-      url.searchParams.append('where', `${fuelPrixField} is not null and ${fuelMajField} is not null`);
+      fuelCondition = `${fuelPrixField} is not null and ${fuelMajField} is not null`;
     } else {
       // If no specific fuel, ensure at least one fuel has a valid price
-      url.searchParams.append('where', 'gazole_prix is not null or sp95_prix is not null or sp98_prix is not null or e10_prix is not null or e85_prix is not null or gplc_prix is not null');
+      fuelCondition = 'gazole_prix is not null or sp95_prix is not null or sp98_prix is not null or e10_prix is not null or e85_prix is not null or gplc_prix is not null';
     }
+
+    // Combine all conditions into a single where clause
+    const whereClause = `${geoFilter} and (${fuelCondition})`;
+
+    // Build the query URL
+    const url = new URL(DATA_GOUV_API_URL);
+    url.searchParams.append('where', whereClause);
+    url.searchParams.append('limit', normalizedLimit.toString());
 
     // Add sorting by price (ascending) for the default fuel
     const sortField = params.carburant ? `${params.carburant}_prix` : 'gazole_prix';
@@ -120,8 +126,8 @@ export default async function handler(
         const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
         
         for (const fuel of fuels) {
-          const prix = record[`${fuel}_prix`];
-          const rupture = record[`${fuel}_rupture`];
+          const prix = record[`${fuel}_prix` as keyof StationRecord];
+          const rupture = record[`${fuel}_rupture` as keyof StationRecord];
           
           if (prix !== null && prix > 0 && !rupture) {
             return true; // At least one valid fuel
@@ -132,11 +138,11 @@ export default async function handler(
       });
 
       // Limit results to the requested limit
-      const limitedResults = validStations.slice(0, params.limit);
+      const limitedResults = validStations.slice(0, normalizedLimit);
 
       res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes cache
       res.setHeader('X-Data-Source', 'data.economie.gouv.fr');
-      res.setHeader('X-Results-Total', data.results?.length.toString() || '0');
+      res.setHeader('X-Results-Total', (data.results?.length || 0).toString());
       
       return res.status(200).json({
         results: limitedResults,
@@ -146,7 +152,7 @@ export default async function handler(
     } catch (error) {
       clearTimeout(timeoutId);
       
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return res.status(504).json({ 
           error: 'Request to external API timed out' 
         });
