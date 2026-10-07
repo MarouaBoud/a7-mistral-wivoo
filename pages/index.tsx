@@ -48,6 +48,20 @@ padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px
 .go{background:var(--accent);color:#fff}
 .leaflet-tooltip.num{background:none;border:0;box-shadow:none;color:#fff;font:700 12px var(--mono);padding:0}.leaflet-tooltip.num:before{display:none}
 .leaflet-control-attribution{font-size:9px}
+.pj-camion div{font-size:30px;line-height:40px;text-align:center;filter:drop-shadow(0 2px 3px #0006);transform:scaleX(-1)}
+.pj-station .pin{position:absolute;left:-20px;top:-46px;width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#fa500f;border:3px solid #fff;box-shadow:0 3px 10px #0005;display:grid;place-items:center}
+.pj-station .pin{font-size:0}.pj-station .pin::after{content:"⛽";font-size:18px;transform:rotate(45deg)}
+.pj-station .lbl{position:absolute;left:24px;top:-56px;white-space:nowrap;background:#1e1e1e;color:#fff;padding:6px 10px;border-radius:10px;font:12px/1.3 var(--body);box-shadow:0 3px 10px #0004}
+.pj-station .lbl b{display:block;font-size:13px}.pj-station .lbl span{color:#ffb000;font-family:var(--mono);font-size:11px}
+.simu{display:none}
+@media (min-width:900px){
+ .simu{display:flex;flex-direction:column;gap:10px;position:fixed;top:50%;left:calc(50% + 240px);transform:translateY(-50%);width:230px;
+  background:#fff;border-radius:20px;padding:18px;box-shadow:0 10px 40px #0002;font:14px/1.4 var(--body);color:#1e1e1e}
+ .simu .t{font:400 17px var(--display)}.simu p{margin:0;color:#6b5f4f;font-size:13px}.simu .h{font:500 12px var(--mono)}
+ .simu button{border:0;border-radius:12px;padding:11px;background:#f1ece0;font:600 14px var(--body);cursor:pointer}
+ .simu .big{background:#fa500f;color:#fff;font:400 15px var(--display);text-transform:uppercase;padding:14px}
+ .simu .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+}
 /* Sur ordinateur : rendu dans un cadre iPhone */
 @media (min-width:500px){
  html,body{background:#d9d4c7}
@@ -71,11 +85,14 @@ export default function Conduite() {
   const [suivre, setSuivre] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const dernierCalcul = useRef<Point | null>(null);
+  const simu = useRef(false); // true dès que le panneau de simulation pilote la position
+  const [auto, setAuto] = useState(false);
 
   useEffect(() => {
     if (!('geolocation' in navigator)) { setErreur('GPS indisponible sur cet appareil.'); return; }
     const id = navigator.geolocation.watchPosition(
       (p) => {
+        if (simu.current) return;
         const pt = { lat: p.coords.latitude, lon: p.coords.longitude };
         setPosition(pt);
         setTrace((t) => (t.length && distanceKm(t[t.length - 1], pt, 1) < 0.01 ? t : [...t, pt]));
@@ -155,6 +172,34 @@ export default function Conduite() {
   }
 
   const pleinFait = () => { setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
+  // Simulateur (ordinateur) : déplace le camion de pasM mètres vers le prochain arrêt
+  function deplacer(pasM: number, cap?: [number, number]) {
+    simu.current = true; setSimulee(true); setErreur('Simulation');
+    const depart = position ?? POSITION_SIMULEE;
+    const cible = arrets[0];
+    let pt: Point;
+    if (cap) {
+      pt = { lat: depart.lat + (cap[0] * pasM) / 111000, lon: depart.lon + (cap[1] * pasM) / (111000 * Math.cos((depart.lat * Math.PI) / 180)) };
+    } else if (!cible) {
+      setAuto(false); return;
+    } else {
+      const reste = distanceKm(depart, cible, 1) * 1000;
+      const f = Math.min(1, pasM / Math.max(reste, 1));
+      pt = { lat: depart.lat + (cible.lat - depart.lat) * f, lon: depart.lon + (cible.lon - depart.lon) * f };
+      if (f === 1 && !cible.plein) setArrets((a) => a.slice(1)); // livraison atteinte
+      if (f === 1 && cible.plein) setAuto(false);                // à la pompe : on attend « Plein fait »
+    }
+    setPosition(pt);
+    setTrace((t) => [...t, pt]);
+    setSuivre(true);
+  }
+
+  useEffect(() => {
+    if (!auto) return;
+    const id = setInterval(() => deplacer(120), 700);
+    return () => clearInterval(id);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
   const livrer = () => { setArrets((a) => a.slice(1)); dernierCalcul.current = null; };
   const prochain = arrets[0];
 
@@ -170,7 +215,7 @@ export default function Conduite() {
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="app">
         <div className="map">
-          <LiveMap position={position} trace={trace} arrets={arrets} classement={classement} suivre={suivre}
+          <LiveMap position={position} trace={trace} arrets={arrets} suivre={suivre}
             onDeplacement={() => setSuivre(false)} />
         </div>
 
@@ -225,6 +270,18 @@ export default function Conduite() {
           </div>
         </div>
       </div>
+
+      <aside className="simu">
+        <div className="t">Simulateur de trajet</div>
+        <p>Fais avancer le camion vers {arrets[0] ? (arrets[0].plein ? 'la station' : `la livraison : ${arrets[0].client}`) : 'la fin de tournée'}.</p>
+        <button className="big" onClick={() => setAuto(!auto)}>{auto ? '⏸ Pause' : '▶ Rouler'}</button>
+        <button onClick={() => deplacer(300)}>Avancer de 300 m ▸</button>
+        <div className="pad">
+          <span /><button onClick={() => deplacer(200, [1, 0])}>↑</button><span />
+          <button onClick={() => deplacer(200, [0, -1])}>←</button><button onClick={() => deplacer(200, [-1, 0])}>↓</button><button onClick={() => deplacer(200, [0, 1])}>→</button>
+        </div>
+        <p className="h">Livraisons restantes : {livraisons.length}</p>
+      </aside>
     </>
   );
 }
