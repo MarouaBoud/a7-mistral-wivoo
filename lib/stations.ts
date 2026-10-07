@@ -26,15 +26,17 @@ export function transformStationRecord(record: StationRecord): StationData {
     { field: 'e85', key: 'e85' },
     { field: 'gplc', key: 'gplc' },
   ] as const;
+  type FuelField = 'gazole' | 'sp95' | 'sp98' | 'e10' | 'e85' | 'gplc';
+  const fuelFields: FuelField[] = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
 
-  for (const { field, key } of fuels) {
-    const prix = rest[`${field}_prix`];
-    const maj = rest[`${field}_maj`];
-    const rupture = rest[`${field}_rupture`];
+  for (const field of fuelFields) {
+    const prix = rest[`${field}_prix` as const];
+    const maj = rest[`${field}_maj` as const];
+    const rupture = rest[`${field}_rupture` as const];
 
     if (prix !== null && prix !== undefined && !rupture) {
-      stationData.carburants[key] = {
-        prix: prix,
+      stationData.carburants[field] = {
+        prix,
         dateMaj: maj || '',
         enRupture: rupture || false,
       };
