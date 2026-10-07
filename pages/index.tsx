@@ -186,7 +186,6 @@ export default function Conduite() {
         <div className="stripe"><i /><i /><i /><i /><i /></div>
         <header>
           <h1>PleinJuste</h1>
-          <span className="src">Prix : <b>data.gouv.fr · prix-carburants</b> · live</span>
         </header>
 
         <div className="map">
