@@ -41,12 +41,21 @@ padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px
 .segs button{flex:1;height:26px;border-radius:4px;background:#2a2620}
 .segs button.on{background:#ffb000;box-shadow:0 0 8px #ffb00088}
 .segs button.on.low{background:#e10500;box-shadow:0 0 8px #e1050088}
-.actions{display:flex;gap:10px}
+.actions{display:flex;flex-direction:column;gap:8px}
 .actions>*{flex:1;height:54px;border-radius:16px;display:grid;place-items:center;font:400 15px var(--display);letter-spacing:.03em;text-transform:uppercase;text-decoration:none}
 .plein{background:var(--ink);color:var(--bg)}.plein:disabled{opacity:.5}
 .go{background:var(--accent);color:#fff}
 .leaflet-tooltip.num{background:none;border:0;box-shadow:none;color:#fff;font:700 12px var(--mono);padding:0}.leaflet-tooltip.num:before{display:none}
 .leaflet-control-attribution{font-size:9px}
+/* Sur ordinateur : rendu dans un cadre iPhone */
+@media (min-width:500px){
+ html,body{background:#d9d4c7}
+ .app{inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);width:393px;height:min(852px,calc(100vh - 40px));border-radius:54px;overflow:hidden;
+  box-shadow:0 0 0 12px #111,0 0 0 14px #3a3a3a,0 30px 80px #0006;isolation:isolate}
+ .app::before{content:"";position:absolute;z-index:3000;top:11px;left:50%;transform:translateX(-50%);width:120px;height:34px;border-radius:20px;background:#000}
+ .topbar{top:56px}
+ .sheet{padding-bottom:28px}
+}
 `;
 
 const nom = (s: StationData) => s.nom || s.adresse;
@@ -205,7 +214,7 @@ export default function Conduite() {
           </div>
 
           <div className="actions">
-            <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? '…' : '⛽ Plein'}</button>
+            <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? 'Recherche…' : '⛽ Trouver la station'}</button>
             {prochain && (
               <a className="go" target="_blank" rel="noreferrer"
                 href={`https://maps.apple.com/?daddr=${prochain.lat},${prochain.lon}&dirflg=d`}>Y aller</a>
