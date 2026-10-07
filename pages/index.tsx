@@ -27,6 +27,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);overscroll-b
 .recentrer{position:absolute;z-index:1000;right:12px;width:44px;height:44px;border-radius:50%;background:var(--surface);color:var(--ink);font-size:20px;box-shadow:0 2px 12px #0003}
 .sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;
 padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px #0003;display:flex;flex-direction:column;gap:12px;max-width:520px;margin:0 auto}
+.gain{display:flex;align-items:center;gap:12px;background:#e8f7ec;color:#14532d;border-radius:14px;padding:10px 14px;font-size:13px;line-height:1.3}
+.gain .eur{font:400 24px var(--display);color:#15803d;white-space:nowrap}.gain small{opacity:.7}
 .titre{font:400 20px/1.1 var(--display);text-align:center;letter-spacing:.01em}
 .grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
 .next{display:flex;align-items:center;gap:12px}
@@ -87,6 +89,7 @@ export default function Conduite() {
   const dernierCalcul = useRef<Point | null>(null);
   const simu = useRef(false); // true dès que le panneau de simulation pilote la position
   const [auto, setAuto] = useState(false);
+  const [economise, setEconomise] = useState(0);
 
   useEffect(() => {
     if (!('geolocation' in navigator)) { setErreur('GPS indisponible sur cet appareil.'); return; }
@@ -137,8 +140,8 @@ export default function Conduite() {
   const [cherche, setCherche] = useState(false);
   const [simulee, setSimulee] = useState(false);
 
-  const checkpoint = (st: StationData, label: string): Livraison => ({
-    id: `plein-${st.id}`, plein: true, client: `⛽ Plein · ${nom(st)}`,
+  const checkpoint = (st: StationData, label: string, gain?: Livraison['gain']): Livraison => ({
+    id: `plein-${st.id}`, plein: true, gain, client: `⛽ Plein · ${nom(st)}`,
     adresse: `${label} · ${st.carburants[VEHICULE.carburant]!.prix.toFixed(3)} €/L · ${st.ville}`,
     lat: st.latitude, lon: st.longitude,
   });
@@ -158,10 +161,16 @@ export default function Conduite() {
         const q = new URLSearchParams({ lat: `${mid.lat}`, lon: `${mid.lon}`, rayon: `${rayon}`, carburant: VEHICULE.carburant, limit: '100' });
         const d = await (await fetch(`/api/stations?${q}`)).json();
         if (d.error) throw new Error(d.error);
-        const c = classerStations(d.results.map(transformStationRecord), position_, cible, { ...VEHICULE, niveauL },
-          { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })[0];
+        const liste = classerStations(d.results.map(transformStationRecord), position_, cible, { ...VEHICULE, niveauL },
+          { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire });
+        const c = liste[0];
         if (!c) continue;
-        setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`), ...sansPlein]);
+        // Gain : comparé au réflexe du conducteur (la moins chère au litre), sinon à la plus proche
+        const moinsChere = liste.reduce((m, x) => (x.prix < m.prix ? x : m));
+        const plusProche = liste.reduce((m, x) => (x.detourKm < m.detourKm ? x : m));
+        const ref = moinsChere !== c ? moinsChere : plusProche !== c ? plusProche : null;
+        const gain = ref ? { euros: ref.coutReel - c.coutReel, vs: ref === moinsChere ? 'la moins chère au litre' : 'la plus proche' } : undefined;
+        setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`, gain), ...sansPlein]);
         setSuivre(true);
         return;
       }
@@ -171,7 +180,9 @@ export default function Conduite() {
     } finally { setCherche(false); }
   }
 
-  const pleinFait = () => { setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
+  const pleinFait = () => {
+    setEconomise((e) => e + (arrets.find((x) => x.plein)?.gain?.euros ?? 0));
+    setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
   // Simulateur (ordinateur) : déplace le camion de pasM mètres vers le prochain arrêt
   function deplacer(pasM: number, cap?: [number, number]) {
     simu.current = true; setSimulee(true); setErreur('Simulation');
@@ -187,7 +198,7 @@ export default function Conduite() {
       const f = Math.min(1, pasM / Math.max(reste, 1));
       pt = { lat: depart.lat + (cible.lat - depart.lat) * f, lon: depart.lon + (cible.lon - depart.lon) * f };
       if (f === 1 && !cible.plein) setArrets((a) => a.slice(1)); // livraison atteinte
-      if (f === 1 && cible.plein) setAuto(false);                // à la pompe : on attend « Plein fait »
+      if (f === 1 && cible.plein) pleinFait();                   // à la pompe : plein fait, on repart
     }
     setPosition(pt);
     setTrace((t) => [...t, pt]);
@@ -246,6 +257,13 @@ export default function Conduite() {
               <button className="done" onClick={pleinFait}>Plein fait</button>
             </div>
           )}
+          {pleinPrevu?.gain && (
+            <div className="gain">
+              <span className="eur">−{eur(pleinPrevu.gain.euros)}</span>
+              <span>économisés vs {pleinPrevu.gain.vs}<br /><small>plein + détour + temps chauffeur</small></span>
+            </div>
+          )}
+          {!pleinPrevu && economise > 0 && <div className="gain"><span className="eur">{eur(economise)}</span><span>économisés aujourd'hui</span></div>}
 
           <div className="jauge">
             <div className="row"><span>Carburant</span><span className="val">{Math.round(niveauL)} L · {Math.round(autonomie)} km</span></div>
