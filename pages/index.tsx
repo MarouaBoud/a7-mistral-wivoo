@@ -3,12 +3,11 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import { transformStationRecord } from '../lib/stations';
 import { classerTournee, classerStations, distanceKm, eur, Point, CoutStationTournee, HYPOTHESES_DEFAUT } from '../lib/cout';
-import { CONDUCTEUR, VEHICULE, LIVRAISONS, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
+import { CONDUCTEURS, VEHICULES, TOURNEES, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
 import { StationData } from '../types/station';
 
 const LiveMap = dynamic(() => import('../components/LiveMap'), { ssr: false });
 
-const POSITION_SIMULEE = { lat: 48.8584, lon: 2.3470 }; // Châtelet
 const RECALCUL_M = 500; // recalcul après 500 m parcourus
 
 const CSS = `
@@ -64,6 +63,18 @@ padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px
  .simu .big{background:#fa500f;color:#fff;font:400 15px var(--display);text-transform:uppercase;padding:14px}
  .simu .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 }
+.setup{position:absolute;inset:0;z-index:2500;background:var(--bg);padding:calc(70px + env(safe-area-inset-top)) 20px 30px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.setup .stripe{display:flex;height:8px}.setup .stripe i{flex:1}
+.setup .stripe i:nth-child(1){background:#ffd800}.setup .stripe i:nth-child(2){background:#ffaf00}.setup .stripe i:nth-child(3){background:#ff8205}.setup .stripe i:nth-child(4){background:#fa500f}.setup .stripe i:nth-child(5){background:#e10500}
+.setup h2{font:400 30px/1 var(--display);margin:4px 0 6px}
+.setup label,.setup .lbl{display:flex;flex-direction:column;gap:6px;font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.setup select{font:500 16px var(--body);padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-transform:none;letter-spacing:0}
+.trajets{display:flex;flex-direction:column;gap:8px}
+.trajets button{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:14px;border-radius:14px;background:var(--surface);color:var(--ink);border:2px solid var(--line)!important;font-size:15px}
+.trajets button.on{border-color:var(--accent)!important;box-shadow:inset 4px 0 0 var(--accent)}
+.trajets span{font:500 11px var(--mono);color:var(--muted)}
+.setup .start{margin-top:auto;height:56px;border-radius:16px;background:var(--accent);color:#fff;font:400 16px var(--display);text-transform:uppercase;letter-spacing:.03em}
+.idcard{cursor:pointer}
 /* Sur ordinateur : rendu dans un cadre iPhone */
 @media (min-width:500px){
  html,body{background:#d9d4c7}
@@ -80,7 +91,13 @@ const nom = (s: StationData) => s.nom || s.adresse;
 export default function Conduite() {
   const [position, setPosition] = useState<Point | null>(null);
   const [trace, setTrace] = useState<Point[]>([]);
-  const [arrets, setArrets] = useState<Livraison[]>(LIVRAISONS);
+  const [choix, setChoix] = useState({ conducteur: CONDUCTEURS[0].id, vehicule: VEHICULES[0].id, tournee: TOURNEES[0].id });
+  const [reglage, setReglage] = useState(true); // écran de choix affiché au lancement
+  const CONDUCTEUR = CONDUCTEURS.find((c) => c.id === choix.conducteur)!;
+  const VEHICULE = VEHICULES.find((v) => v.id === choix.vehicule)!;
+  const TOURNEE = TOURNEES.find((t) => t.id === choix.tournee)!;
+  const POSITION_SIMULEE = TOURNEE.depart;
+  const [arrets, setArrets] = useState<Livraison[]>(TOURNEE.livraisons);
   const [crans, setCrans] = useState(0); // crans allumés sur la jauge, saisis par le conducteur
   const horaire = 28; // €/h, fixé par le gestionnaire
   const [stations, setStations] = useState<StationData[]>([]);
@@ -210,13 +227,34 @@ export default function Conduite() {
     return () => clearInterval(id);
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function demarrer() {
+    try { localStorage.setItem('pj-choix', JSON.stringify(choix)); } catch { /* stockage indisponible */ }
+    setAuto(false);
+    setArrets(TOURNEE.livraisons);
+    setTrace([]);
+    setCrans(0);
+    setEconomise(0);
+    setStations([]);
+    dernierCalcul.current = null;
+    if (simulee || !position) { simu.current = true; setSimulee(true); setPosition(TOURNEE.depart); }
+    setSuivre(true);
+    setReglage(false);
+  }
+
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem('pj-choix') ?? 'null');
+      if (c && CONDUCTEURS.some((x) => x.id === c.conducteur) && VEHICULES.some((x) => x.id === c.vehicule) && TOURNEES.some((x) => x.id === c.tournee)) setChoix(c);
+    } catch { /* stockage indisponible */ }
+  }, []);
+
   const livrer = () => { setArrets((a) => a.slice(1)); dernierCalcul.current = null; };
   const prochain = arrets[0];
 
   return (
     <>
       <Head>
-        <title>PleinJuste</title>
+        <title>PleinPot</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -230,16 +268,42 @@ export default function Conduite() {
         </div>
 
         <div className="topbar">
-          <div className="idcard">
+          <div className="idcard" onClick={() => { setAuto(false); setReglage(true); }} role="button" title="Changer de profil ou de trajet">
             <div className="avatar">{CONDUCTEUR.prenom[0]}{CONDUCTEUR.nom[0]}</div>
             <div>
               <div className="who">{CONDUCTEUR.prenom} {CONDUCTEUR.nom}</div>
-              <div className="car">{VEHICULE.modele} · {VEHICULE.immat}</div>
+              <div className="car">{VEHICULE.modele} · {TOURNEE.nom}</div>
             </div>
           </div>
           <div className="status">{erreur ?? (!position ? 'Signal GPS…' : !prochain ? 'Tournée terminée' :
             `${prochain.plein ? 'Plein' : 'Livraison'} à ${distanceKm(position, prochain, 1.3).toFixed(1).replace('.', ',')} km`)}</div>
         </div>
+
+        {reglage && (
+          <div className="setup">
+            <div className="stripe"><i /><i /><i /><i /><i /></div>
+            <h2>PleinJuste</h2>
+            <label>Conducteur
+              <select value={choix.conducteur} onChange={(e) => setChoix({ ...choix, conducteur: +e.target.value })}>
+                {CONDUCTEURS.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
+              </select>
+            </label>
+            <label>Véhicule
+              <select value={choix.vehicule} onChange={(e) => setChoix({ ...choix, vehicule: +e.target.value })}>
+                {VEHICULES.map((v) => <option key={v.id} value={v.id}>{v.modele} · {v.type} · {v.consoL100} L/100</option>)}
+              </select>
+            </label>
+            <div className="lbl">Trajet</div>
+            <div className="trajets">
+              {TOURNEES.map((t) => (
+                <button key={t.id} className={t.id === choix.tournee ? 'on' : ''} onClick={() => setChoix({ ...choix, tournee: t.id })}>
+                  <b>{t.nom}</b><span>{t.livraisons.length} livraisons</span>
+                </button>
+              ))}
+            </div>
+            <button className="start" onClick={demarrer}>Démarrer la tournée</button>
+          </div>
+        )}
 
         <div className="sheet">
           <div className="grab" />
