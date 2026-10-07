@@ -5,7 +5,7 @@
 ### Structure des fichiers créés
 
 ```
-a7-mistral-wivoo/
+pleinpot/
 ├── .gitignore
 ├── next.config.js
 ├── package.json
@@ -67,7 +67,7 @@ a7-mistral-wivoo/
 
 1. **Installer les dépendances** :
    ```bash
-   cd a7-mistral-wivoo
+   cd pleinpot
    npm install
    ```
 

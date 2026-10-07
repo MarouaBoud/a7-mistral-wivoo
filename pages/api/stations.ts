@@ -33,7 +33,7 @@ export default async function handler(
       limit: limit ? parseInt(limit as string) : DEFAULT_LIMIT,
     };
     
-    const normalizedLimit = Number.isFinite(params.limit) ? params.limit : DEFAULT_LIMIT;
+    const normalizedLimit: number = params.limit !== undefined && Number.isFinite(params.limit) ? params.limit : DEFAULT_LIMIT;
 
     // Validate parameters
     if (isNaN(params.lat) || isNaN(params.lon) || isNaN(params.rayon)) {
@@ -98,7 +98,7 @@ export default async function handler(
         });
       }
 
-      // Normalise le schéma data.gouv (cp, *_rupture_type, pas de nom) vers StationRecord
+      // Normalise le schema data.gouv (cp, *_rupture_type, pas de nom) vers StationRecord
       const FUELS = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
       data.results = data.results.map((r: any) => ({
         ...r,
@@ -111,17 +111,17 @@ export default async function handler(
       // Filter out stations with no valid prices or with fuel shortages
       const validStations = data.results.filter((record: StationRecord) => {
         // Check if the station has at least one valid fuel price that's not in shortage
-        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'] as const;
+        const fuels = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
         
         for (const fuel of fuels) {
-          const prix = record[`${fuel}_prix`];
-          const rupture = record[`${fuel}_rupture`];
+          const prix = record[`${fuel}_prix` as keyof StationRecord] as number | null;
+          const rupture = record[`${fuel}_rupture` as keyof StationRecord] as boolean;
           
           if (prix !== null && prix > 0 && !rupture) {
             return true; // At least one valid fuel
           }
         }
-        
+
         return false; // No valid fuels
       });
 

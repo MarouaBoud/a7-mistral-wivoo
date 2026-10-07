@@ -44,6 +44,88 @@ La spécification détaillée est dans la skill [`.vibe/skills/cout-detour/SKILL
 
 ## API stations
 
+pleinpot/
+├── components/
+│   └── FuelMap.tsx              # Composant carte Leaflet avec stations
+├── lib/
+│   └── stations.ts              # Fonctions utilitaires de transformation
+├── pages/
+│   ├── index.tsx                # Page d'accueil
+│   ├── _app.tsx                 # Application Next.js
+│   ├── api/
+│   │   └── stations.ts          # API pour récupérer les stations
+│   └── test/
+│       └── fuel-test.tsx        # Page de démonstration
+├── types/
+│   └── station.ts               # Types TypeScript
+├── styles/
+│   └── globals.css              # Styles globaux
+├── public/
+│   └── images/                  # Images pour les marqueurs
+├── package.json
+├── tsconfig.json
+└── next.config.js
+```
+
+## Fonctionnalités Implémentées
+
+### 1. Carte (FuelMap)
+- **Leaflet** avec fond OpenStreetMap
+- Chargement uniquement côté client (SSR-safe avec 'use client')
+- Attribution © OpenStreetMap contributors
+- Hauteur explicite configurable
+- Marqueurs des stations avec icônes SVG personnalisées
+- Popups avec :
+  - Nom et adresse de la station
+  - Meilleur prix par carburant
+  - Prix en €/L
+  - Date de mise à jour
+  - Liste des autres carburants disponibles
+
+### 2. API Stations
+- Route serveur Next.js : `/api/stations`
+- Interrogation de l'API officielle : `data.economie.gouv.fr`
+- Paramètres supportés :
+  - `lat` : Latitude (requis)
+  - `lon` : Longitude (requis)  
+  - `rayon` : Rayon de recherche en km (requis, 0-100)
+  - `carburant` : Type de carburant (optionnel)
+  - `limit` : Limite de résultats (optionnel, max 100)
+- Validation complète des paramètres
+- Filtrage géographique avec `geofilter(distance,lon,lat,radiusInMeters)`
+- Exclusion des prix absents et carburants en rupture
+- Cache HTTP de 5 minutes
+- Timeout de 10 secondes
+- Gestion d'erreurs complète
+
+### 3. Page de Test
+- URL : `/test/fuel-test`
+- Saisie de latitude, longitude et rayon
+- Bouton de géolocalisation
+- Localisations tests prédéfinies (Paris, Lyon, Marseille, etc.)
+- Affichage des stations sous forme de liste et sur la carte
+- Affichage du nombre total de stations trouvées
+
+## Installation
+
+1. **Cloner le dépôt** (si applicable)
+2. **Installer les dépendances** :
+   ```bash
+   cd pleinpot
+   npm install
+   ```
+
+3. **Lancer le serveur de développement** :
+   ```bash
+   npm run dev
+   ```
+
+4. **Ouvrir la page de test** :
+   [http://localhost:3000/test/fuel-test](http://localhost:3000/test/fuel-test)
+
+## Utilisation de l'API
+
+### Requête GET
 ```
 GET /api/stations?lat=48.8566&lon=2.3522&rayon=10&carburant=gazole&limit=20
 ```

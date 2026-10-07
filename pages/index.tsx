@@ -3,68 +3,87 @@ import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import { transformStationRecord } from '../lib/stations';
 import { classerTournee, classerStations, distanceKm, eur, Point, CoutStationTournee, HYPOTHESES_DEFAUT } from '../lib/cout';
-import { CONDUCTEUR, VEHICULE, LIVRAISONS, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
+import { CONDUCTEURS, VEHICULES, TOURNEES, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
 import { StationData } from '../types/station';
 
 const LiveMap = dynamic(() => import('../components/LiveMap'), { ssr: false });
 
-const POSITION_SIMULEE = { lat: 48.8584, lon: 2.3470 }; // Châtelet
 const RECALCUL_M = 500; // recalcul après 500 m parcourus
 
 const CSS = `
-:root{--bg:#fffaeb;--surface:#fff;--ink:#1e1e1e;--muted:#6b5f4f;--line:#ead9b8;--accent:#fa500f;--route:#1e1e1e;--warn:#ffaf00;
---display:"Archivo Black",system-ui,sans-serif;--body:"Archivo",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#141210;--surface:#1f1b17;--ink:#fff3d9;--muted:#b3a58c;--line:#3a3128;--accent:#ff8205;--route:#fff3d9;--warn:#ffd800}}
-html,body{background:var(--bg)}
-.pj{max-width:440px;margin:0 auto;padding:14px 16px calc(90px + env(safe-area-inset-bottom));color:var(--ink);font:14px/1.45 var(--body)}
-.stripe{display:flex;height:8px;margin-bottom:12px}.stripe i{flex:1}
-.stripe i:nth-child(1){background:#ffd800}.stripe i:nth-child(2){background:#ffaf00}.stripe i:nth-child(3){background:#ff8205}.stripe i:nth-child(4){background:#fa500f}.stripe i:nth-child(5){background:#e10500}
-.pj header{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-bottom:10px}
-.pj h1{font:400 28px/1 var(--display);margin:0}
-.src{font:500 11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.src b{color:var(--accent)}
-.map{height:46vh;min-height:280px;border:1px solid var(--line);position:relative;overflow:hidden}
-.hud{position:absolute;left:10px;bottom:10px;z-index:1000;display:flex;gap:6px;flex-wrap:wrap}
-.chip{background:var(--surface);border:1px solid var(--line);padding:4px 8px;font:500 12px var(--mono);color:var(--ink)}
-.pj button{font:400 14px var(--display);letter-spacing:.04em;text-transform:uppercase;background:var(--accent);color:#fff;border:0;border-radius:0;padding:7px 12px;cursor:pointer}
-.pj button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
-.stack{display:flex;flex-direction:column;gap:12px;margin-top:12px}
-details.veh{background:var(--surface);border:1px solid var(--line);padding:12px}
-details.veh summary{font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;color:var(--muted)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:10px}
-.grid label{font:500 11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:flex;flex-direction:column;gap:3px}
-.grid input,.grid select{font:500 16px var(--mono);padding:5px 6px;border:1px solid var(--line);border-radius:0;background:var(--bg);color:var(--ink)}
-.best{background:linear-gradient(90deg,#ffaf00,#fa500f 60%,#e10500);color:#1e1e1e;padding:14px}
-.best .k{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;opacity:.85}
-.best .n{font:400 22px/1.15 var(--display)}.best .s{font-size:13px;margin-top:4px}
-.pj ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.pj li{background:var(--surface);border:1px solid var(--line);padding:9px 11px;display:grid;grid-template-columns:1fr auto;gap:2px 10px}
-.pj li.top{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
-.nm{font-weight:500}.tot{font:500 15px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
-.dt{font:500 11.5px var(--mono);color:var(--muted);grid-column:1/-1}
-.trap{color:var(--warn)}.old{color:var(--accent)}
-
-.id{position:sticky;top:0;z-index:1600;background:var(--ink);color:var(--bg);margin:0 -16px 12px;padding:10px 16px;display:flex;justify-content:space-between;gap:10px;align-items:center}
-.id .who{font:400 16px/1.1 var(--display)}.id .car{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.05em;opacity:.8;text-align:right}
-.jauge{background:#111;color:#ffb000;padding:12px;border:1px solid var(--line)}
-.jauge .top{display:flex;justify-content:space-between;align-items:baseline;font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:#9a8a70}
-.jauge .val{font:500 26px var(--mono);color:#ffb000;text-shadow:0 0 8px #ffb00088}
-.segs{display:flex;align-items:center;gap:4px;margin-top:8px;font:500 14px var(--mono)}
-.segs button{flex:1;height:30px;padding:0!important;background:#2a2620!important;border:0}
-.segs button.on{background:#ffb000!important;box-shadow:0 0 8px #ffb00088}
-.segs button.on.low{background:#e10500!important;box-shadow:0 0 8px #e1050088}
-.liv li{grid-template-columns:auto 1fr auto;align-items:center}.liv .no{font:400 16px var(--display);width:26px;height:26px;display:grid;place-items:center;background:var(--muted);color:var(--surface)}
-.liv li:first-child .no{background:#e10500}.liv .ad{font-size:12px;color:var(--muted)}
+:root{--bg:#fffaeb;--surface:#fff;--ink:#1e1e1e;--muted:#6b5f4f;--line:#ead9b8;--accent:#fa500f;--route:#1e1e1e;
+--display:"Archivo Black",system-ui,sans-serif;--body:"Archivo",-apple-system,system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#141210;--surface:#1f1b17;--ink:#fff3d9;--muted:#b3a58c;--line:#3a3128;--accent:#ff8205;--route:#fff3d9}}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);overscroll-behavior:none}
+.app{position:fixed;inset:0;color:var(--ink);font:15px/1.35 var(--body);-webkit-tap-highlight-color:transparent}
+.app button{font-family:inherit;border:0;cursor:pointer;-webkit-appearance:none}
+.map{position:absolute;inset:0}
+.topbar{position:absolute;z-index:1000;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.idcard{pointer-events:auto;display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--bg);border-radius:18px;padding:10px 14px;box-shadow:0 6px 24px #0003}
+.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#ffaf00,#e10500);display:grid;place-items:center;font:400 15px var(--display);color:#1e1e1e;flex:none}
+.idcard .who{font-weight:600;font-size:16px}.idcard .car{font:500 11px var(--mono);opacity:.7;letter-spacing:.03em}
+.status{align-self:flex-start;pointer-events:auto;background:var(--surface);border-radius:999px;padding:6px 12px;font:500 12px var(--mono);box-shadow:0 2px 10px #0002}
+.recentrer{position:absolute;z-index:1000;right:12px;width:44px;height:44px;border-radius:50%;background:var(--surface);color:var(--ink);font-size:20px;box-shadow:0 2px 12px #0003}
+.sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;
+padding:8px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 30px #0003;display:flex;flex-direction:column;gap:12px;max-width:520px;margin:0 auto}
+.gain{display:flex;align-items:center;gap:12px;background:#e8f7ec;color:#14532d;border-radius:14px;padding:10px 14px;font-size:13px;line-height:1.3}
+.gain .eur{font:400 24px var(--display);color:#15803d;white-space:nowrap}.gain small{opacity:.7}
+.titre{font:400 20px/1.1 var(--display);text-align:center;letter-spacing:.01em}
+.grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
+.next{display:flex;align-items:center;gap:12px}
+.next .no{width:36px;height:36px;border-radius:12px;background:#e10500;color:#fff;display:grid;place-items:center;font:400 16px var(--display);flex:none}
+.next .no.plein{background:#ffaf00;color:#1e1e1e}
+.next .txt{flex:1;min-width:0}.next .k{font:500 11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.next .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.next .ad{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.next .done{background:var(--bg);color:var(--ink);border:1px solid var(--line)!important;border-radius:12px;padding:9px 12px;font-weight:600;font-size:13px;flex:none}
+.jauge{background:#111;border-radius:16px;padding:10px 12px}
+.jauge .row{display:flex;justify-content:space-between;align-items:baseline;font:500 11px var(--mono);color:#9a8a70;text-transform:uppercase;letter-spacing:.05em}
+.jauge .val{font:500 22px var(--mono);color:#ffb000;text-shadow:0 0 8px #ffb00088;text-transform:none}
+.segs{display:flex;align-items:center;gap:4px;margin-top:8px;font:500 13px var(--mono);color:#9a8a70}
+.segs button{flex:1;height:26px;border-radius:4px;background:#2a2620}
+.segs button.on{background:#ffb000;box-shadow:0 0 8px #ffb00088}
+.segs button.on.low{background:#e10500;box-shadow:0 0 8px #e1050088}
+.actions{display:flex;flex-direction:column;gap:8px}
+.actions>*{flex:1;height:54px;border-radius:16px;display:grid;place-items:center;font:400 15px var(--display);letter-spacing:.03em;text-transform:uppercase;text-decoration:none}
+.plein{background:var(--ink);color:var(--bg)}.plein:disabled{opacity:.5}
+.go{background:var(--accent);color:#fff}
 .leaflet-tooltip.num{background:none;border:0;box-shadow:none;color:#fff;font:700 12px var(--mono);padding:0}.leaflet-tooltip.num:before{display:none}
-.trouver{width:100%;padding:14px!important;font-size:16px!important;background:var(--ink)!important;color:var(--bg)!important}
-.trouver:disabled{opacity:.5}
-.proche{border:2px solid var(--accent);background:var(--surface);padding:12px}
-.proche .k{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
-.proche .n{font:400 20px/1.15 var(--display)}.proche .s{font-size:13px;color:var(--muted)}
-.proche .act{display:flex;gap:8px;margin-top:10px}.proche .act>*{flex:1;text-align:center}
-.proche a{font:400 14px var(--display);text-transform:uppercase;background:var(--accent);color:#fff;padding:9px;text-decoration:none}
-.note{font-size:12px;color:var(--muted);margin:0}
-.cta{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));width:min(408px,calc(100% - 32px));padding:14px!important;font-size:16px!important;text-align:center;text-decoration:none;z-index:1500;
-font:400 16px var(--display);letter-spacing:.04em;text-transform:uppercase;background:var(--accent);color:#fff;box-sizing:border-box}
+.leaflet-control-attribution{font-size:9px}
+.pj-camion div{font-size:30px;line-height:40px;text-align:center;filter:drop-shadow(0 2px 3px #0006);transform:scaleX(-1)}
+.pj-station .pin{position:absolute;left:-20px;top:-46px;width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#fa500f;border:3px solid #fff;box-shadow:0 3px 10px #0005;display:grid;place-items:center}
+.pj-station .pin{font-size:0}.pj-station .pin::after{content:"⛽";font-size:18px;transform:rotate(45deg)}
+.pj-station .lbl{position:absolute;left:24px;top:-56px;white-space:nowrap;background:#1e1e1e;color:#fff;padding:6px 10px;border-radius:10px;font:12px/1.3 var(--body);box-shadow:0 3px 10px #0004}
+.pj-station .lbl b{display:block;font-size:13px}.pj-station .lbl span{color:#ffb000;font-family:var(--mono);font-size:11px}
+.simu{display:none}
+@media (min-width:900px){
+ .simu{display:flex;flex-direction:column;gap:10px;position:fixed;top:50%;left:calc(50% + 240px);transform:translateY(-50%);width:230px;
+  background:#fff;border-radius:20px;padding:18px;box-shadow:0 10px 40px #0002;font:14px/1.4 var(--body);color:#1e1e1e}
+ .simu .t{font:400 17px var(--display)}.simu p{margin:0;color:#6b5f4f;font-size:13px}.simu .h{font:500 12px var(--mono)}
+ .simu button{border:0;border-radius:12px;padding:11px;background:#f1ece0;font:600 14px var(--body);cursor:pointer}
+ .simu .big{background:#fa500f;color:#fff;font:400 15px var(--display);text-transform:uppercase;padding:14px}
+ .simu .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+}
+.setup{position:absolute;inset:0;z-index:2500;background:var(--bg);padding:calc(70px + env(safe-area-inset-top)) 20px 30px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.setup .stripe{display:flex;height:8px}.setup .stripe i{flex:1}
+.setup .stripe i:nth-child(1){background:#ffd800}.setup .stripe i:nth-child(2){background:#ffaf00}.setup .stripe i:nth-child(3){background:#ff8205}.setup .stripe i:nth-child(4){background:#fa500f}.setup .stripe i:nth-child(5){background:#e10500}
+.setup h2{font:400 30px/1 var(--display);margin:4px 0 6px}
+.setup label,.setup .lbl{display:flex;flex-direction:column;gap:6px;font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.setup select{font:500 16px var(--body);padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-transform:none;letter-spacing:0}
+.trajets{display:flex;flex-direction:column;gap:8px}
+.trajets button{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:14px;border-radius:14px;background:var(--surface);color:var(--ink);border:2px solid var(--line)!important;font-size:15px}
+.trajets button.on{border-color:var(--accent)!important;box-shadow:inset 4px 0 0 var(--accent)}
+.trajets span{font:500 11px var(--mono);color:var(--muted)}
+.setup .start{margin-top:auto;height:56px;border-radius:16px;background:var(--accent);color:#fff;font:400 16px var(--display);text-transform:uppercase;letter-spacing:.03em}
+.idcard{cursor:pointer}
+/* Sur ordinateur : rendu dans un cadre iPhone */
+@media (min-width:500px){
+ html,body{background:#d9d4c7}
+ .app{inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);width:393px;height:min(852px,calc(100vh - 40px));border-radius:54px;overflow:hidden;
+  box-shadow:0 0 0 12px #111,0 0 0 14px #3a3a3a,0 30px 80px #0006;isolation:isolate}
+ .app::before{content:"";position:absolute;z-index:3000;top:11px;left:50%;transform:translateX(-50%);width:120px;height:34px;border-radius:20px;background:#000}
+ .topbar{top:56px}
+ .sheet{padding-bottom:28px}
+}
 `;
 
 const nom = (s: StationData) => s.nom || s.adresse;
@@ -72,18 +91,28 @@ const nom = (s: StationData) => s.nom || s.adresse;
 export default function Conduite() {
   const [position, setPosition] = useState<Point | null>(null);
   const [trace, setTrace] = useState<Point[]>([]);
-  const [arrets, setArrets] = useState<Livraison[]>(LIVRAISONS);
-  const [crans, setCrans] = useState(2); // crans allumés sur la jauge, saisis par le conducteur
+  const [choix, setChoix] = useState({ conducteur: CONDUCTEURS[0].id, vehicule: VEHICULES[0].id, tournee: TOURNEES[0].id });
+  const [reglage, setReglage] = useState(true); // écran de choix affiché au lancement
+  const CONDUCTEUR = CONDUCTEURS.find((c) => c.id === choix.conducteur)!;
+  const VEHICULE = VEHICULES.find((v) => v.id === choix.vehicule)!;
+  const TOURNEE = TOURNEES.find((t) => t.id === choix.tournee)!;
+  const POSITION_SIMULEE = TOURNEE.depart;
+  const [arrets, setArrets] = useState<Livraison[]>(TOURNEE.livraisons);
+  const [crans, setCrans] = useState(0); // crans allumés sur la jauge, saisis par le conducteur
   const horaire = 28; // €/h, fixé par le gestionnaire
   const [stations, setStations] = useState<StationData[]>([]);
   const [suivre, setSuivre] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const dernierCalcul = useRef<Point | null>(null);
+  const simu = useRef(false); // true dès que le panneau de simulation pilote la position
+  const [auto, setAuto] = useState(false);
+  const [economise, setEconomise] = useState(0);
 
   useEffect(() => {
     if (!('geolocation' in navigator)) { setErreur('GPS indisponible sur cet appareil.'); return; }
     const id = navigator.geolocation.watchPosition(
       (p) => {
+        if (simu.current) return;
         const pt = { lat: p.coords.latitude, lon: p.coords.longitude };
         setPosition(pt);
         setTrace((t) => (t.length && distanceKm(t[t.length - 1], pt, 1) < 0.01 ? t : [...t, pt]));
@@ -93,7 +122,6 @@ export default function Conduite() {
         // Sans GPS (refus, ordinateur, http sur mobile) : position simulée près de la 1re livraison pour la démo
         setPosition((p) => p ?? POSITION_SIMULEE);
         setSimulee(true);
-        setErreur(e.code === 1 ? 'Localisation refusée · position simulée' : 'GPS indisponible · position simulée');
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
@@ -123,17 +151,13 @@ export default function Conduite() {
     ? classerTournee(stations, position, livraisons, { ...VEHICULE, niveauL },
       { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })
     : [];
-  const best = classement[0];
-  const cheap = classement.length ? classement.reduce((m, c) => (c.prix < m.prix ? c : m)) : null;
   const autonomie = (niveauL / VEHICULE.consoL100) * 100 * 0.85;
-  const quand = (c: CoutStationTournee) => (c.troncon === 0 ? 'maintenant, avant la livraison 1' : `après la livraison ${c.troncon}`);
-  const numLiv = (l: Livraison) => livraisons.indexOf(l) + 1;
 
   const [cherche, setCherche] = useState(false);
   const [simulee, setSimulee] = useState(false);
 
-  const checkpoint = (st: StationData, label: string): Livraison => ({
-    id: `plein-${st.id}`, plein: true, client: `⛽ Plein · ${nom(st)}`,
+  const checkpoint = (st: StationData, label: string, gain?: Livraison['gain']): Livraison => ({
+    id: `plein-${st.id}`, plein: true, gain, client: `⛽ Plein · ${nom(st)}`,
     adresse: `${label} · ${st.carburants[VEHICULE.carburant]!.prix.toFixed(3)} €/L · ${st.ville}`,
     lat: st.latitude, lon: st.longitude,
   });
@@ -153,10 +177,16 @@ export default function Conduite() {
         const q = new URLSearchParams({ lat: `${mid.lat}`, lon: `${mid.lon}`, rayon: `${rayon}`, carburant: VEHICULE.carburant, limit: '100' });
         const d = await (await fetch(`/api/stations?${q}`)).json();
         if (d.error) throw new Error(d.error);
-        const c = classerStations(d.results.map(transformStationRecord), position_, cible, { ...VEHICULE, niveauL },
-          { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })[0];
+        const liste = classerStations(d.results.map(transformStationRecord), position_, cible, { ...VEHICULE, niveauL },
+          { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire });
+        const c = liste[0];
         if (!c) continue;
-        setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`), ...sansPlein]);
+        // Gain : comparé au réflexe du conducteur (la moins chère au litre), sinon à la plus proche
+        const moinsChere = liste.reduce((m, x) => (x.prix < m.prix ? x : m));
+        const plusProche = liste.reduce((m, x) => (x.detourKm < m.detourKm ? x : m));
+        const ref = moinsChere !== c ? moinsChere : plusProche !== c ? plusProche : null;
+        const gain = ref ? { euros: ref.coutReel - c.coutReel, vs: ref === moinsChere ? 'la moins chère au litre' : 'la plus proche' } : undefined;
+        setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`, gain), ...sansPlein]);
         setSuivre(true);
         return;
       }
@@ -166,47 +196,140 @@ export default function Conduite() {
     } finally { setCherche(false); }
   }
 
-  const pleinFait = () => { setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
+  const pleinFait = () => {
+    setEconomise((e) => e + (arrets.find((x) => x.plein)?.gain?.euros ?? 0));
+    setArrets((a) => a.filter((x) => !x.plein)); setCrans(GRADUATIONS_JAUGE); dernierCalcul.current = null; };
+  // Simulateur (ordinateur) : déplace le camion de pasM mètres vers le prochain arrêt
+  function deplacer(pasM: number, cap?: [number, number]) {
+    simu.current = true; setSimulee(true);
+    const depart = position ?? POSITION_SIMULEE;
+    const cible = arrets[0];
+    let pt: Point;
+    if (cap) {
+      pt = { lat: depart.lat + (cap[0] * pasM) / 111000, lon: depart.lon + (cap[1] * pasM) / (111000 * Math.cos((depart.lat * Math.PI) / 180)) };
+    } else if (!cible) {
+      setAuto(false); return;
+    } else {
+      const reste = distanceKm(depart, cible, 1) * 1000;
+      const f = Math.min(1, pasM / Math.max(reste, 1));
+      pt = { lat: depart.lat + (cible.lat - depart.lat) * f, lon: depart.lon + (cible.lon - depart.lon) * f };
+      if (f === 1 && !cible.plein) setArrets((a) => a.slice(1)); // livraison atteinte
+      if (f === 1 && cible.plein) pleinFait();                   // à la pompe : plein fait, on repart
+    }
+    setPosition(pt);
+    setTrace((t) => [...t, pt]);
+    setSuivre(true);
+  }
+
+  useEffect(() => {
+    if (!auto) return;
+    const id = setInterval(() => deplacer(400), 300);
+    return () => clearInterval(id);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function demarrer() {
+    try { localStorage.setItem('pj-choix', JSON.stringify(choix)); } catch { /* stockage indisponible */ }
+    setAuto(false);
+    setArrets(TOURNEE.livraisons);
+    setTrace([]);
+    setCrans(0);
+    setEconomise(0);
+    setStations([]);
+    dernierCalcul.current = null;
+    if (simulee || !position) { simu.current = true; setSimulee(true); setPosition(TOURNEE.depart); }
+    setSuivre(true);
+    setReglage(false);
+  }
+
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem('pj-choix') ?? 'null');
+      if (c && CONDUCTEURS.some((x) => x.id === c.conducteur) && VEHICULES.some((x) => x.id === c.vehicule) && TOURNEES.some((x) => x.id === c.tournee)) setChoix(c);
+    } catch { /* stockage indisponible */ }
+  }, []);
+
   const livrer = () => { setArrets((a) => a.slice(1)); dernierCalcul.current = null; };
   const prochain = arrets[0];
 
   return (
     <>
       <Head>
-        <title>PleinJuste</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>PleinPot</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" />
       </Head>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className="pj">
-        <div className="id">
-          <div className="who">{CONDUCTEUR.prenom} {CONDUCTEUR.nom.toUpperCase()}</div>
-          <div className="car">{VEHICULE.modele}<br />{VEHICULE.immat}</div>
-        </div>
-        <div className="stripe"><i /><i /><i /><i /><i /></div>
-        <header>
-          <h1>PleinJuste</h1>
-          <span className="src">Prix : <b>data.gouv.fr · prix-carburants</b> · live</span>
-        </header>
-
+      <div className="app">
         <div className="map">
-          <LiveMap position={position} trace={trace} arrets={arrets} classement={classement} suivre={suivre}
+          <LiveMap position={position} trace={trace} arrets={arrets} suivre={suivre}
             onDeplacement={() => setSuivre(false)} />
-          <div className="hud">
-            <span className="chip">{erreur ?? (!position ? 'Signal GPS…' : !arrets.length ? 'Tournée terminée' :
-              `${prochain.plein ? 'Plein' : 'Livraison 1'} à ${distanceKm(position, prochain, 1.3).toFixed(1)} km`)}</span>
-            <span className="chip">Autonomie {Math.round(autonomie)} km</span>
-            {!suivre && <button onClick={() => setSuivre(true)}>Recentrer</button>}
-          </div>
         </div>
 
-        <div className="stack">
-          <button className="trouver" onClick={pleinMaintenant} disabled={cherche}>
-            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Rechercher à nouveau depuis ici' : '⛽ Faire le plein maintenant'}
-          </button>
+        <div className="topbar">
+          <div className="idcard" onClick={() => { setAuto(false); setReglage(true); }} role="button" title="Changer de profil ou de trajet">
+            <div className="avatar">{CONDUCTEUR.prenom[0]}{CONDUCTEUR.nom[0]}</div>
+            <div>
+              <div className="who">{CONDUCTEUR.prenom} {CONDUCTEUR.nom}</div>
+              <div className="car">{VEHICULE.modele} · {TOURNEE.nom}</div>
+            </div>
+          </div>
+          <div className="status">{erreur ?? (!position ? 'Signal GPS…' : !prochain ? 'Tournée terminée' :
+            `${prochain.plein ? 'Plein' : 'Livraison'} à ${distanceKm(position, prochain, 1.3).toFixed(1).replace('.', ',')} km`)}</div>
+        </div>
+
+        {reglage && (
+          <div className="setup">
+            <div className="stripe"><i /><i /><i /><i /><i /></div>
+            <h2>PleinJuste</h2>
+            <label>Conducteur
+              <select value={choix.conducteur} onChange={(e) => setChoix({ ...choix, conducteur: +e.target.value })}>
+                {CONDUCTEURS.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
+              </select>
+            </label>
+            <label>Véhicule
+              <select value={choix.vehicule} onChange={(e) => setChoix({ ...choix, vehicule: +e.target.value })}>
+                {VEHICULES.map((v) => <option key={v.id} value={v.id}>{v.modele} · {v.type} · {v.consoL100} L/100</option>)}
+              </select>
+            </label>
+            <div className="lbl">Trajet</div>
+            <div className="trajets">
+              {TOURNEES.map((t) => (
+                <button key={t.id} className={t.id === choix.tournee ? 'on' : ''} onClick={() => setChoix({ ...choix, tournee: t.id })}>
+                  <b>{t.nom}</b><span>{t.livraisons.length} livraisons</span>
+                </button>
+              ))}
+            </div>
+            <button className="start" onClick={demarrer}>Démarrer la tournée</button>
+          </div>
+        )}
+
+        <div className="sheet">
+          <div className="grab" />
+          {!suivre && <button className="recentrer" style={{ top: -56 }} onClick={() => setSuivre(true)} aria-label="Recentrer">◎</button>}
+
+          <div className="titre">Trouver la station</div>
+          {pleinPrevu && (
+            <div className="next">
+              <div className="no plein">⛽</div>
+              <div className="txt">
+                <div className="nm">{pleinPrevu.client.replace('⛽ Plein · ', '')}</div>
+                <div className="ad">{pleinPrevu.adresse}</div>
+              </div>
+              <button className="done" onClick={pleinFait}>Plein fait</button>
+            </div>
+          )}
+          {pleinPrevu?.gain && (
+            <div className="gain">
+              <span className="eur">−{eur(pleinPrevu.gain.euros)}</span>
+              <span>économisés vs {pleinPrevu.gain.vs}<br /><small>plein + détour + temps chauffeur</small></span>
+            </div>
+          )}
+          {!pleinPrevu && economise > 0 && <div className="gain"><span className="eur">{eur(economise)}</span><span>économisés aujourd'hui</span></div>}
 
           <div className="jauge">
-            <div className="top"><span>⛽ Carburant · comme au tableau de bord</span><span className="val">{Math.round(niveauL)} L</span></div>
+            <div className="row"><span>Carburant</span><span className="val">{Math.round(niveauL)} L · {Math.round(autonomie)} km</span></div>
             <div className="segs" role="group" aria-label="Niveau de carburant">
               <span>E</span>
               {Array.from({ length: GRADUATIONS_JAUGE }, (_, i) => (
@@ -215,51 +338,31 @@ export default function Conduite() {
               ))}
               <span>F</span>
             </div>
-            <div className="top" style={{ marginTop: 6 }}><span>Autonomie ≈ {Math.round(autonomie)} km</span><span>Plein : {Math.round(VEHICULE.reservoirL - niveauL)} L</span></div>
           </div>
 
-          <ol className="liv">
-            {arrets.map((l, i) => (
-              <li key={l.id}><span className="no" style={l.plein ? { background: '#ffaf00', color: '#1e1e1e' } : undefined}>{l.plein ? '⛽' : numLiv(l)}</span>
-                <span><span className="nm">{l.client}</span><br /><span className="ad">{l.adresse}</span></span>
-                {l.plein ? <button onClick={pleinFait}>Plein fait</button> : i === 0 ? <button onClick={livrer}>Livré</button> : <span />}
-              </li>
-            ))}
-          </ol>
-
-          {livraisons.length > 0 && !pleinPrevu && (best ? (
-            <div className="best">
-              <div className="k">Meilleur plein de la tournée · {quand(best)}</div>
-              <div className="n">{nom(best.station)}</div>
-              <div className="s">{best.station.ville} · {eur(best.coutReel)} réel · détour {best.detourKm.toFixed(1)} km / {Math.round(best.detourMin)} min</div>
-            </div>
-          ) : stations.length > 0 && (
-            <div className="best"><div className="k">Alerte</div><div className="n">Aucune station dans l'autonomie</div>
-              <div className="s">Prends la plus proche immédiatement.</div></div>
-          ))}
-
-          <ol>
-            {classement.slice(0, 12).map((c) => (
-              <li key={c.station.id} className={c === best ? 'top' : ''}>
-                <span className="nm">{nom(c.station)}
-                  {c === cheap && c !== best && <span className="trap"> · moins cher au litre, pas au total</span>}
-                </span>
-                <span className="tot">{eur(c.coutReel)}</span>
-                <span className="dt">{c.prix.toFixed(3)} €/L · <span className="old">{quand(c)}</span> · plein {c.coutPlein.toFixed(2)} + détour {c.coutDetour.toFixed(2)} + temps {c.coutTemps.toFixed(2)}
-                  {c.prixPerime && <span className="old"> · prix &gt; 24 h</span>}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="note">Coût réel = plein + carburant du détour + temps du chauffeur. Recalculé tous les {RECALCUL_M} m.</p>
+          <div className="actions">
+            {crans > 0 && (
+              <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? 'Recherche…' : '⛽ Trouver la station'}</button>
+            )}
+            {crans > 0 && pleinPrevu && (
+              <a className="go" target="_blank" rel="noreferrer"
+                href={`https://maps.apple.com/?daddr=${pleinPrevu.lat},${pleinPrevu.lon}&dirflg=d`}>Y aller</a>
+            )}
+          </div>
         </div>
-
-        {prochain && (
-          <a className="cta" target="_blank" rel="noreferrer"
-            href={`https://www.google.com/maps/dir/?api=1&destination=${prochain.lat},${prochain.lon}`}>
-            {prochain.plein ? 'Y aller · plein' : 'Y aller · livraison 1'}
-          </a>
-        )}
       </div>
+
+      <aside className="simu">
+        <div className="t">Simulateur de trajet</div>
+        <p>Fais avancer le camion vers {arrets[0] ? (arrets[0].plein ? 'la station' : `la livraison : ${arrets[0].client}`) : 'la fin de tournée'}.</p>
+        <button className="big" onClick={() => setAuto(!auto)}>{auto ? '⏸ Pause' : '▶ Rouler'}</button>
+        <button onClick={() => deplacer(300)}>Avancer de 300 m ▸</button>
+        <div className="pad">
+          <span /><button onClick={() => deplacer(200, [1, 0])}>↑</button><span />
+          <button onClick={() => deplacer(200, [0, -1])}>←</button><button onClick={() => deplacer(200, [-1, 0])}>↓</button><button onClick={() => deplacer(200, [0, 1])}>→</button>
+        </div>
+        <p className="h">Livraisons restantes : {livraisons.length}</p>
+      </aside>
     </>
   );
 }
