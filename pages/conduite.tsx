@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import { transformStationRecord } from '../lib/stations';
-import { classerTournee, distanceKm, eur, Point, CoutStationTournee, HYPOTHESES_DEFAUT } from '../lib/cout';
+import { classerTournee, classerStations, distanceKm, eur, Point, CoutStationTournee, HYPOTHESES_DEFAUT } from '../lib/cout';
 import { CONDUCTEUR, VEHICULE, LIVRAISONS, GRADUATIONS_JAUGE, Livraison } from '../lib/tournee';
 import { StationData } from '../types/station';
 
@@ -131,30 +131,28 @@ export default function Conduite() {
     lat: st.latitude, lon: st.longitude,
   });
 
-  // Ajoute un arrêt plein dans la tournée : la station au meilleur coût réel, placée sur le bon tronçon
-  // selon la position et le carburant restant ; à défaut, la plus proche, tout de suite.
-  async function ajouterPlein() {
+  // Le conducteur décide quand faire le plein : on cherche, depuis sa position actuelle, la station au
+  // meilleur coût réel sur le chemin de sa prochaine livraison, et on l'insère comme prochain arrêt.
+  async function pleinMaintenant() {
     if (!position) { setErreur('Position GPS inconnue.'); return; }
     const sansPlein = arrets.filter((a) => !a.plein);
-    if (best) {
-      const cp = checkpoint(best.station, `${eur(best.coutReel)} réel · détour ${best.detourKm.toFixed(1)} km`);
-      setArrets([...sansPlein.slice(0, best.troncon), cp, ...sansPlein.slice(best.troncon)]);
-      return;
-    }
+    const cible = sansPlein[0] ?? position; // tournée finie : simple aller-retour
     setCherche(true);
     try {
-      for (const rayon of [3, 10, 30]) {
-        const q = new URLSearchParams({ lat: `${position.lat}`, lon: `${position.lon}`, rayon: `${rayon}`, carburant: VEHICULE.carburant, limit: '100' });
+      for (const marge of [3, 10, 30]) {
+        const mid = { lat: (position.lat + cible.lat) / 2, lon: (position.lon + cible.lon) / 2 };
+        const rayon = Math.min(100, distanceKm(position, cible, 1) / 2 + marge);
+        const q = new URLSearchParams({ lat: `${mid.lat}`, lon: `${mid.lon}`, rayon: `${rayon}`, carburant: VEHICULE.carburant, limit: '100' });
         const d = await (await fetch(`/api/stations?${q}`)).json();
         if (d.error) throw new Error(d.error);
-        const dispo = (d.results.map(transformStationRecord) as StationData[]).filter((s) => s.carburants[VEHICULE.carburant]);
-        if (!dispo.length) continue;
-        const km = (s: StationData) => distanceKm(position, { lat: s.latitude, lon: s.longitude }, HYPOTHESES_DEFAUT.facteurRoute);
-        const s = dispo.reduce((m, x) => (km(x) < km(m) ? x : m));
-        setArrets([checkpoint(s, `la plus proche · ${km(s).toFixed(1)} km`), ...sansPlein]);
+        const c = classerStations(d.results.map(transformStationRecord), position, cible, { ...VEHICULE, niveauL },
+          { ...HYPOTHESES_DEFAUT, coutHoraireChauffeur: horaire })[0];
+        if (!c) continue;
+        setArrets([checkpoint(c.station, `${eur(c.coutReel)} réel · détour ${c.detourKm.toFixed(1)} km`), ...sansPlein]);
+        setSuivre(true);
         return;
       }
-      setErreur('Aucune station à moins de 30 km.');
+      setErreur('Aucune station accessible avec le carburant restant.');
     } catch (e) {
       setErreur(e instanceof Error ? e.message : String(e));
     } finally { setCherche(false); }
@@ -195,9 +193,8 @@ export default function Conduite() {
         </div>
 
         <div className="stack">
-          <button className="trouver" onClick={ajouterPlein}
-            disabled={cherche || !position || !!pleinPrevu}>
-            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Arrêt plein ajouté à la tournée' : '⛽ Ajouter un arrêt plein'}
+          <button className="trouver" onClick={pleinMaintenant} disabled={cherche || !position}>
+            {cherche ? 'Recherche…' : pleinPrevu ? '⛽ Rechercher à nouveau depuis ici' : '⛽ Faire le plein maintenant'}
           </button>
 
           <div className="jauge">
