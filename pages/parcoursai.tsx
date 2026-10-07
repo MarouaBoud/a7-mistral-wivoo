@@ -31,6 +31,13 @@ html,body{margin:0;height:100%;background:var(--bg)}
 .sugg{display:flex;flex-direction:column;gap:6px}
 .sugg button{text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
 .err{color:#e10500;font-size:13px}
+.voix{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line);background:var(--surface)}
+.micro{width:72px;height:72px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:30px;cursor:pointer;flex:none;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 18px #fa500f55;transition:transform .15s}
+.micro.rec{background:#e10500;transform:scale(1.12);animation:pulse 1s infinite}
+.micro.talk{animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 #e1050088}100%{box-shadow:0 0 0 22px #e1050000}}
+.voix .lg{flex:1;font:500 12px var(--mono);color:var(--muted)}
+.voix .hp{border:0;background:var(--bg);border-radius:50%;width:42px;height:42px;font-size:18px;cursor:pointer}
 form{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface)}
 form input{flex:1;font-size:16px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 form button{border:0;border-radius:14px;padding:0 16px;background:var(--accent);color:#fff;font:400 14px var(--display);text-transform:uppercase;cursor:pointer}
@@ -51,6 +58,11 @@ export default function ParcoursAI() {
   const [attente, setAttente] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const fin = useRef<HTMLDivElement>(null);
+  const [ecoute, setEcoute] = useState(false);
+  const [voixOn, setVoixOn] = useState(true);
+  const [parle, setParle] = useState(false);
+  const enreg = useRef<MediaRecorder | null>(null);
+  const lecteur = useRef<HTMLAudioElement | null>(null);
 
   const v = VEHICULES.find((x) => x.id === vehiculeId)!;
   const t = TOURNEES.find((x) => x.id === tourneeId)!;
@@ -72,9 +84,69 @@ export default function ParcoursAI() {
       if (!r.ok) throw new Error(d.error);
       setOutils(d.outils.map((o: { nom: string }) => o.nom));
       setMessages([...fil, { role: 'assistant', content: d.reponse }]);
+      if (voixOn) parler(d.reponse);
     } catch (e) {
       setErreur(e instanceof Error ? e.message : String(e));
     } finally { setAttente(false); }
+  }
+
+  // Voxtral TTS : lit la réponse à voix haute (repli : synthèse du navigateur)
+  async function parler(texte: string) {
+    lecteur.current?.pause();
+    setParle(true);
+    try {
+      const r = await fetch('/api/voix/parler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texte }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      const a = new Audio(`data:audio/mp3;base64,${d.audio}`);
+      lecteur.current = a;
+      a.onended = () => setParle(false);
+      await a.play();
+    } catch {
+      const u = new SpeechSynthesisUtterance(texte);
+      u.lang = 'fr-FR';
+      u.onend = () => setParle(false);
+      speechSynthesis.speak(u);
+    }
+  }
+
+  // Voxtral STT : appuyer pour parler, relâcher pour envoyer
+  async function demarrerMicro() {
+    if (ecoute || attente) return;
+    lecteur.current?.pause(); speechSynthesis.cancel(); setParle(false);
+    setErreur(null);
+    try {
+      const flux = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ['audio/webm', 'audio/mp4', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
+      const rec = new MediaRecorder(flux, type ? { mimeType: type } : undefined);
+      const bouts: Blob[] = [];
+      rec.ondataavailable = (e) => e.data.size && bouts.push(e.data);
+      rec.onstop = async () => {
+        flux.getTracks().forEach((t) => t.stop());
+        const audio = new Blob(bouts, { type: rec.mimeType });
+        if (audio.size < 2000) return; // appui trop court
+        setAttente(true);
+        try {
+          const r = await fetch('/api/voix/transcrire', { method: 'POST', headers: { 'Content-Type': rec.mimeType }, body: audio });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error);
+          setAttente(false);
+          if (d.texte) envoyer(d.texte); else setErreur('Je n’ai rien entendu.');
+        } catch (e) {
+          setAttente(false);
+          setErreur(e instanceof Error ? e.message : String(e));
+        }
+      };
+      rec.start();
+      enreg.current = rec;
+      setEcoute(true);
+    } catch {
+      setErreur('Autorise le micro pour parler au copilote.');
+    }
+  }
+  function arreterMicro() {
+    if (enreg.current?.state === 'recording') enreg.current.stop();
+    setEcoute(false);
   }
 
   return (
@@ -88,7 +160,7 @@ export default function ParcoursAI() {
       <div className="ai">
         <div className="hd">
           <h1>Copilote PleinJuste</h1>
-          <div className="sub">{c.prenom} {c.nom} · agent Mistral</div>
+          <div className="sub">{c.prenom} {c.nom} · Mistral + Voxtral</div>
           <div className="ctx">
             <select value={conducteur} onChange={(e) => setConducteur(+e.target.value)}>
               {CONDUCTEURS.map((x) => <option key={x.id} value={x.id}>{x.prenom} {x.nom}</option>)}
@@ -110,7 +182,7 @@ export default function ParcoursAI() {
         <div className="fil">
           {messages.length === 0 && (
             <div className="sugg">
-              <div className="outil">Demande-moi où faire le plein :</div>
+              <div className="outil">Maintiens le micro et parle, ou touche une question :</div>
               {SUGGESTIONS.map((s) => <button key={s} onClick={() => envoyer(s)}>{s}</button>)}
             </div>
           )}
@@ -119,6 +191,14 @@ export default function ParcoursAI() {
           {attente && <div className="b assistant">…</div>}
           {erreur && <div className="err">{erreur}</div>}
           <div ref={fin} />
+        </div>
+
+        <div className="voix">
+          <button className={`micro ${ecoute ? 'rec' : ''} ${parle ? 'talk' : ''}`}
+            onPointerDown={demarrerMicro} onPointerUp={arreterMicro} onPointerLeave={arreterMicro}
+            aria-label="Maintenir pour parler">{ecoute ? '●' : '🎙️'}</button>
+          <div className="lg">{ecoute ? 'Je t’écoute… relâche pour envoyer' : attente ? 'Voxtral réfléchit…' : parle ? 'Je te réponds…' : 'Maintiens pour parler'}</div>
+          <button className="hp" onClick={() => { setVoixOn(!voixOn); lecteur.current?.pause(); speechSynthesis.cancel(); }}>{voixOn ? '🔊' : '🔇'}</button>
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); envoyer(texte); }}>
