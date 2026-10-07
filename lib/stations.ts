@@ -5,7 +5,7 @@ import { StationRecord, StationData } from '../types/station';
  */
 export function transformStationRecord(record: StationRecord): StationData {
   const { geom, ...rest } = record;
-
+  
   const stationData: StationData = {
     id: rest.id,
     nom: rest.nom,
@@ -18,18 +18,16 @@ export function transformStationRecord(record: StationRecord): StationData {
   };
 
   // Map fuel data
-  const fuels = [
-    { key: 'gazole' as const, prix: rest.gazole_prix, maj: rest.gazole_maj, rupture: rest.gazole_rupture },
-    { key: 'sp95' as const, prix: rest.sp95_prix, maj: rest.sp95_maj, rupture: rest.sp95_rupture },
-    { key: 'sp98' as const, prix: rest.sp98_prix, maj: rest.sp98_maj, rupture: rest.sp98_rupture },
-    { key: 'e10' as const, prix: rest.e10_prix, maj: rest.e10_maj, rupture: rest.e10_rupture },
-    { key: 'e85' as const, prix: rest.e85_prix, maj: rest.e85_maj, rupture: rest.e85_rupture },
-    { key: 'gplc' as const, prix: rest.gplc_prix, maj: rest.gplc_maj, rupture: rest.gplc_rupture },
-  ];
+  type FuelField = 'gazole' | 'sp95' | 'sp98' | 'e10' | 'e85' | 'gplc';
+  const fuelFields: FuelField[] = ['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'];
 
-  for (const { key, prix, maj, rupture } of fuels) {
+  for (const field of fuelFields) {
+    const prix = rest[`${field}_prix` as const];
+    const maj = rest[`${field}_maj` as const];
+    const rupture = rest[`${field}_rupture` as const];
+
     if (prix !== null && prix !== undefined && !rupture) {
-      stationData.carburants[key] = {
+      stationData.carburants[field] = {
         prix,
         dateMaj: maj || '',
         enRupture: rupture || false,
@@ -52,7 +50,7 @@ export function formatPrice(prix: number): string {
  */
 export function formatDate(dateString: string): string {
   if (!dateString) return 'Inconnue';
-
+  
   try {
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
@@ -72,7 +70,7 @@ export function formatDate(dateString: string): string {
  */
 export function isPriceRecent(dateString: string): boolean {
   if (!dateString) return false;
-
+  
   try {
     const date = new Date(dateString);
     const now = new Date();
@@ -92,11 +90,11 @@ export function getCheapestFuel(station: StationData): {
   dateMaj: string;
 } | null {
   const entries = Object.entries(station.carburants);
-
+  
   if (entries.length === 0) return null;
 
   let cheapest = entries[0];
-
+  
   for (const [fuel, data] of entries) {
     if (data.prix < cheapest[1].prix) {
       cheapest = [fuel, data];
