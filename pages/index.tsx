@@ -64,7 +64,7 @@ export default function Conduite() {
   const [position, setPosition] = useState<Point | null>(null);
   const [trace, setTrace] = useState<Point[]>([]);
   const [arrets, setArrets] = useState<Livraison[]>(LIVRAISONS);
-  const [crans, setCrans] = useState(2); // crans allumés sur la jauge, saisis par le conducteur
+  const [crans, setCrans] = useState(0); // crans allumés sur la jauge, saisis par le conducteur
   const horaire = 28; // €/h, fixé par le gestionnaire
   const [stations, setStations] = useState<StationData[]>([]);
   const [suivre, setSuivre] = useState(true);
@@ -214,7 +214,9 @@ export default function Conduite() {
           </div>
 
           <div className="actions">
-            <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? 'Recherche…' : '⛽ Trouver la station'}</button>
+            {crans > 0 && (
+              <button className="plein" onClick={pleinMaintenant} disabled={cherche}>{cherche ? 'Recherche…' : '⛽ Trouver la station'}</button>
+            )}
             {prochain && (
               <a className="go" target="_blank" rel="noreferrer"
                 href={`https://maps.apple.com/?daddr=${prochain.lat},${prochain.lon}&dirflg=d`}>Y aller</a>
