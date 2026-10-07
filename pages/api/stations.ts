@@ -33,6 +33,8 @@ export default async function handler(
       limit: limit ? parseInt(limit as string) : DEFAULT_LIMIT,
     };
     const normalizedLimit = Number.isFinite(params.limit) ? params.limit as number : DEFAULT_LIMIT;
+    
+    const normalizedLimit = Number.isFinite(params.limit) ? params.limit : DEFAULT_LIMIT;
 
     // Validate parameters
     if (isNaN(params.lat) || isNaN(params.lon) || isNaN(params.rayon)) {
@@ -50,6 +52,8 @@ export default async function handler(
     if (normalizedLimit <= 0 || normalizedLimit > MAX_LIMIT) {
       return res.status(400).json({
         error: `Invalid limit: must be between 0 and ${MAX_LIMIT}`
+      return res.status(400).json({ 
+        error: `Invalid limit: must be between 0 and ${MAX_LIMIT}` 
       });
     }
 
@@ -131,6 +135,10 @@ export default async function handler(
           const rupture = typeof rawRupture === 'boolean' ? rawRupture : Boolean(rawRupture);
 
           if (!Number.isNaN(prix) && prix > 0 && !rupture) {
+          const prix = record[`${fuel}_prix` as keyof StationRecord];
+          const rupture = record[`${fuel}_rupture` as keyof StationRecord];
+          
+          if (prix !== null && prix > 0 && !rupture) {
             return true; // At least one valid fuel
           }
         }
@@ -145,6 +153,7 @@ export default async function handler(
       res.setHeader('X-Data-Source', 'data.economie.gouv.fr');
       res.setHeader('X-Results-Total', (data.results?.length || 0).toString());
 
+      
       return res.status(200).json({
         results: limitedResults,
         total: validStations.length,
@@ -156,6 +165,10 @@ export default async function handler(
       if (error instanceof Error && error.name === 'AbortError') {
         return res.status(504).json({
           error: 'Request to external API timed out'
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        return res.status(504).json({ 
+          error: 'Request to external API timed out' 
         });
       }
 
