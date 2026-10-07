@@ -7,6 +7,14 @@ import 'leaflet/dist/leaflet.css';
 import { StationData } from '../types/station';
 import { formatPrice, formatDate } from '../lib/stations';
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [elemName: string]: any;
+    }
+  }
+}
+
 // Fix for default marker icons in Next.js
 // This is necessary because Leaflet's default icon paths don't work in Next.js
 const fixLeafletIcons = () => {
@@ -18,7 +26,7 @@ const fixLeafletIcons = () => {
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     popupAnchor: [1, -34],
-    shadowUrl: null,
+    shadowUrl: undefined,
   };
 };
 
@@ -63,12 +71,18 @@ interface FuelMapProps {
   height?: string;
 }
 
-const FuelMap: React.FC<FuelMapProps> = ({
+interface FuelDataInfo {
+  prix: number;
+  enRupture: boolean;
+  dateMaj: string;
+}
+
+const FuelMap = ({
   stations,
   center,
   zoom = 13,
   height = '400px',
-}) => {
+}: FuelMapProps) => {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -95,8 +109,9 @@ const FuelMap: React.FC<FuelMapProps> = ({
   }
 
   // Filter and prepare fuel data for each station
-  const stationsWithValidFuel = stations.filter(station => {
-    return Object.values(station.carburants).some(fuel => fuel && !fuel.enRupture);
+  const stationsWithValidFuel = stations.filter((station: StationData) => {
+    const carburants = station.carburants as Record<string, FuelDataInfo | null>;
+    return Object.values(carburants).some((fuel) => fuel && !fuel.enRupture);
   });
 
   return (
@@ -115,15 +130,17 @@ const FuelMap: React.FC<FuelMapProps> = ({
           maxZoom={19}
         />
 
-        {stationsWithValidFuel.map((station) => {
-          const carburants = station.carburants;
+        {stationsWithValidFuel.map((station: StationData) => {
+          const carburants = station.carburants as Record<string, FuelDataInfo | null>;
           const validFuels = Object.entries(carburants)
-            .filter(([, data]) => data && !data.enRupture)
-            .sort((a, b) => a[1].prix - b[1].prix);
-          
+            .filter(([, data]) => Boolean(data) && !data!.enRupture)
+            .sort((a, b) => (a[1]?.prix ?? Number.MAX_SAFE_INTEGER) - (b[1]?.prix ?? Number.MAX_SAFE_INTEGER));
+
           if (validFuels.length === 0) return null;
-          
+
           const [fuelType, fuelData] = validFuels[0];
+
+          if (!fuelData) return null;
 
           return (
             <Marker
@@ -162,7 +179,9 @@ const FuelMap: React.FC<FuelMapProps> = ({
                       .filter(([type]) => type !== fuelType)
                       .map(([type, data]) => {
                         if (!data) return null;
-                        
+
+                        const fuelInfo = data as FuelDataInfo;
+
                         return (
                           <div
                             key={type}
@@ -170,13 +189,13 @@ const FuelMap: React.FC<FuelMapProps> = ({
                               margin: '2px 0',
                               fontSize: '12px',
                               padding: '2px 4px',
-                              backgroundColor: data.enRupture ? '#fee' : 'transparent',
+                              backgroundColor: fuelInfo.enRupture ? '#fee' : 'transparent',
                             }}
                           >
-                            <strong>{type.toUpperCase()}:</strong> {formatPrice(data.prix)} €/L
-                            {data.enRupture && ' (Rupture)'}
+                            <strong>{type.toUpperCase()}:</strong> {formatPrice(fuelInfo.prix)} €/L
+                            {fuelInfo.enRupture && ' (Rupture)'}
                             <br />
-                            <small>Mis à jour: {formatDate(data.dateMaj)}</small>
+                            <small>Mis à jour: {formatDate(fuelInfo.dateMaj)}</small>
                           </div>
                         );
                       })}
