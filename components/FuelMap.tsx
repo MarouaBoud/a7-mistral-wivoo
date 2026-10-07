@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { StationData, StationRecord } from '../types/station';
+import { StationData } from '../types/station';
 import { formatPrice, formatDate } from '../lib/stations';
 
 // Fix for default marker icons in Next.js
@@ -94,6 +94,11 @@ const FuelMap: React.FC<FuelMapProps> = ({
     );
   }
 
+  // Filter and prepare fuel data for each station
+  const stationsWithValidFuel = stations.filter(station => {
+    return Object.values(station.carburants).some(fuel => fuel && !fuel.enRupture);
+  });
+
   return (
     <div style={{ width: '100%', height: height, position: 'relative' }}>
       <MapContainer
@@ -110,13 +115,14 @@ const FuelMap: React.FC<FuelMapProps> = ({
           maxZoom={19}
         />
 
-        {stations.map((station) => {
+        {stationsWithValidFuel.map((station) => {
           const carburants = station.carburants;
-          const validFuels = Object.entries(carburants).filter(([, data]) => data && !data.enRupture);
+          const validFuels = Object.entries(carburants)
+            .filter(([, data]) => data && !data.enRupture)
+            .sort((a, b) => a[1].prix - b[1].prix);
           
           if (validFuels.length === 0) return null;
           
-          validFuels.sort((a, b) => a[1].prix - b[1].prix);
           const [fuelType, fuelData] = validFuels[0];
 
           return (
