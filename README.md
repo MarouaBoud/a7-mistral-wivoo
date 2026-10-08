@@ -1,5 +1,9 @@
 # PleinJuste — A7 Fuel Optimizer
 
+[![PleinJuste — vidéo de présentation (20 s)](docs/pitch-poster.jpg)](PleinJust.mp4)
+
+▶ [Voir la vidéo de présentation](PleinJust.mp4) (20 s)
+
 Application Next.js qui indique à un chauffeur-livreur **où faire le plein au meilleur coût réel** pendant sa tournée : prix à la pompe, **plus** le carburant et le temps chauffeur perdus dans le détour.
 
 Une station 5 centimes moins chère mais à 15 km du trajet coûte plus cher qu'une station un peu plus chère située sur la route. PleinJuste fait ce calcul à la place du chauffeur, à partir des prix officiels en temps réel.
